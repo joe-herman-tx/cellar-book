@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Cellar Book</title>
+
+<!-- ===== PWA / home-screen setup ===== -->
+<meta name="theme-color" content="#6B1220" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Cellar Book" />
+<meta name="mobile-web-app-capable" content="yes" />
+<link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj4KPHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHJ4PSI5NiIgZmlsbD0iIzZCMTIyMCIvPgo8cGF0aCBkPSJNMTc2IDEyMGgxNjBsLTE0IDExOGE2NiA2NiAwIDAgMS0xMzIgMHoiIGZpbGw9IiNGMkVGRTgiLz4KPHJlY3QgeD0iMjQ4IiB5PSIzMDAiIHdpZHRoPSIxNiIgaGVpZ2h0PSI3MCIgZmlsbD0iI0YyRUZFOCIvPgo8cmVjdCB4PSIxOTYiIHk9IjM2OCIgd2lkdGg9IjEyMCIgaGVpZ2h0PSIxOCIgcng9IjkiIGZpbGw9IiNGMkVGRTgiLz4KPC9zdmc+" />
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj4KPHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHJ4PSI5NiIgZmlsbD0iIzZCMTIyMCIvPgo8cGF0aCBkPSJNMTc2IDEyMGgxNjBsLTE0IDExOGE2NiA2NiAwIDAgMS0xMzIgMHoiIGZpbGw9IiNGMkVGRTgiLz4KPHJlY3QgeD0iMjQ4IiB5PSIzMDAiIHdpZHRoPSIxNiIgaGVpZ2h0PSI3MCIgZmlsbD0iI0YyRUZFOCIvPgo8cmVjdCB4PSIxOTYiIHk9IjM2OCIgd2lkdGg9IjEyMCIgaGVpZ2h0PSIxOCIgcng9IjkiIGZpbGw9IiNGMkVGRTgiLz4KPC9zdmc+" />
+<link rel="manifest" href="data:application/manifest+json;base64,eyJuYW1lIjogIkNlbGxhciBCb29rIFx1MjAxNCBUYXN0aW5nIExvZyIsICJzaG9ydF9uYW1lIjogIkNlbGxhciBCb29rIiwgInN0YXJ0X3VybCI6ICIuIiwgInNjb3BlIjogIi4iLCAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwgIm9yaWVudGF0aW9uIjogInBvcnRyYWl0IiwgImJhY2tncm91bmRfY29sb3IiOiAiI0YyRUZFOCIsICJ0aGVtZV9jb2xvciI6ICIjNkIxMjIwIiwgImljb25zIjogW3sic3JjIjogImRhdGE6aW1hZ2Uvc3ZnK3htbDtiYXNlNjQsUEhOMlp5QjRiV3h1Y3owaWFIUjBjRG92TDNkM2R5NTNNeTV2Y21jdk1qQXdNQzl6ZG1jaUlIWnBaWGRDYjNnOUlqQWdNQ0ExTVRJZ05URXlJajRLUEhKbFkzUWdkMmxrZEdnOUlqVXhNaUlnYUdWcFoyaDBQU0kxTVRJaUlISjRQU0k1TmlJZ1ptbHNiRDBpSXpaQ01USXlNQ0l2UGdvOGNHRjBhQ0JrUFNKTk1UYzJJREV5TUdneE5qQnNMVEUwSURFeE9HRTJOaUEyTmlBd0lEQWdNUzB4TXpJZ01Ib2lJR1pwYkd3OUlpTkdNa1ZHUlRnaUx6NEtQSEpsWTNRZ2VEMGlNalE0SWlCNVBTSXpNREFpSUhkcFpIUm9QU0l4TmlJZ2FHVnBaMmgwUFNJM01DSWdabWxzYkQwaUkwWXlSVVpGT0NJdlBnbzhjbVZqZENCNFBTSXhPVFlpSUhrOUlqTTJPQ0lnZDJsa2RHZzlJakV5TUNJZ2FHVnBaMmgwUFNJeE9DSWdjbmc5SWpraUlHWnBiR3c5SWlOR01rVkdSVGdpTHo0S1BDOXpkbWMrIiwgInNpemVzIjogIjUxMng1MTIiLCAidHlwZSI6ICJpbWFnZS9zdmcreG1sIiwgInB1cnBvc2UiOiAiYW55IG1hc2thYmxlIn1dfQ==" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  /* ============================================================
+     DESIGN TOKENS  — every color/size lives here so it's easy to change
+     ============================================================ */
+  :root{
+    --paper:      #F2EFE8;   /* page background — warm tasting-sheet paper   */
+    --paper-2:    #FBFAF6;   /* cards / raised surfaces                       */
+    --ink:        #1B1A17;   /* primary text                                 */
+    --ink-soft:   #6A655C;   /* labels, secondary text                       */
+    --oxblood:    #6B1220;   /* the wine accent — scores, active states      */
+    --oxblood-2:  #8A2130;   /* lighter oxblood for hovers                   */
+    --brass:      #9C7A2E;   /* hairline rules & structure gauges            */
+    --slate:      #3C4749;   /* secondary accent                             */
+    --line:       #DAD5C9;   /* dividers                                      */
+    --danger:     #8A2130;
+
+    --radius: 4px;
+    --shadow: 0 1px 2px rgba(27,26,23,.05), 0 8px 24px rgba(27,26,23,.06);
+  }
+
+  *{ box-sizing:border-box; }
+  html{ -webkit-text-size-adjust:100%; }
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Hanken Grotesk", system-ui, sans-serif;
+    line-height:1.5;
+    /* respect iOS notch/safe areas when installed full-screen */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+
+  .wrap{ max-width:1080px; margin:0 auto; padding:32px 20px 80px; }
+
+  /* ---------- Masthead ---------- */
+  header.masthead{
+    border-bottom:2px solid var(--ink);
+    padding-bottom:16px;
+    margin-bottom:8px;
+  }
+  .eyebrow{
+    font-size:11px; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--oxblood); font-weight:700; margin:0 0 6px;
+  }
+  h1{
+    font-family:"Fraunces", Georgia, serif;
+    font-weight:600; font-size:clamp(30px,5vw,46px);
+    margin:0; letter-spacing:-.01em; line-height:1.02;
+  }
+  .masthead .meta{
+    display:flex; gap:18px; flex-wrap:wrap; align-items:baseline;
+    margin-top:10px; color:var(--ink-soft); font-size:13px;
+  }
+  .masthead .meta b{ color:var(--ink); font-family:"Space Mono",monospace; }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar{
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+    margin:20px 0 24px;
+  }
+  .toolbar input[type=search]{
+    flex:1 1 220px; min-width:180px;
+  }
+  select, input, textarea, button{ font-family:inherit; font-size:14px; }
+  input, select, textarea{
+    background:var(--paper-2); border:1px solid var(--line);
+    border-radius:var(--radius); padding:9px 11px; color:var(--ink);
+    width:100%;
+  }
+  input:focus, select:focus, textarea:focus{
+    outline:2px solid var(--oxblood); outline-offset:1px; border-color:transparent;
+  }
+  label{ display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--ink-soft); font-weight:600; margin-bottom:5px; }
+
+  .btn{
+    background:var(--ink); color:var(--paper); border:1px solid var(--ink);
+    border-radius:var(--radius); padding:9px 16px; font-weight:600; cursor:pointer;
+    width:auto; white-space:nowrap; transition:background .15s;
+  }
+  .btn:hover{ background:#000; }
+  .btn.primary{ background:var(--oxblood); border-color:var(--oxblood); }
+  .btn.primary:hover{ background:var(--oxblood-2); }
+  .btn.ghost{ background:transparent; color:var(--ink); border-color:var(--line); }
+  .btn.ghost:hover{ border-color:var(--ink); }
+  .btn:focus-visible{ outline:2px solid var(--oxblood); outline-offset:2px; }
+
+  .sortgroup{ display:flex; align-items:center; gap:6px; }
+  .sortgroup select{ width:auto; }
+
+  /* ---------- Entry form ---------- */
+  .panel{
+    background:var(--paper-2); border:1px solid var(--line);
+    border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:22px; margin-bottom:28px;
+  }
+  .panel h2{
+    font-family:"Fraunces",serif; font-weight:600; font-size:20px; margin:0 0 16px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .panel h2::before{ content:""; width:22px; height:2px; background:var(--oxblood); display:inline-block; }
+  .grid{ display:grid; grid-template-columns:repeat(12,1fr); gap:14px; }
+  .col-2{ grid-column:span 2; } .col-3{ grid-column:span 3; }
+  .col-4{ grid-column:span 4; } .col-6{ grid-column:span 6; }
+  .col-9{ grid-column:span 9; } .col-12{ grid-column:span 12; }
+  @media (max-width:640px){ [class^=col-]{ grid-column:span 12 !important; } }
+  textarea{ resize:vertical; min-height:60px; }
+  .form-actions{ display:flex; gap:10px; margin-top:18px; }
+
+  /* structure gauge inputs (1–5) */
+  .gauge-row{ display:flex; gap:14px; flex-wrap:wrap; }
+  .gauge-field{ flex:1 1 120px; }
+  .gauge-field select{ font-family:"Space Mono",monospace; }
+
+  /* ---------- Entry cards ---------- */
+  .count{ font-size:12px; color:var(--ink-soft); text-transform:uppercase;
+    letter-spacing:.12em; margin:0 0 14px; font-weight:600; }
+  .cards{ display:flex; flex-direction:column; gap:16px; }
+  .card{
+    background:var(--paper-2); border:1px solid var(--line);
+    border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:20px 22px; display:grid; grid-template-columns:1fr auto; gap:18px;
+  }
+  .card .body{ min-width:0; }
+  .vintage-name{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .vintage{ font-family:"Space Mono",monospace; font-size:14px; color:var(--oxblood); font-weight:700; }
+  .wine-name{ font-family:"Fraunces",serif; font-size:22px; font-weight:600; margin:0; letter-spacing:-.01em; }
+  .producer{ color:var(--ink-soft); font-size:13px; margin:2px 0 0; }
+  .tags{ display:flex; gap:8px; flex-wrap:wrap; margin:12px 0 4px; }
+  .tag{ font-size:11px; letter-spacing:.05em; text-transform:uppercase; font-weight:600;
+    color:var(--slate); border:1px solid var(--line); border-radius:999px; padding:3px 10px; }
+  .tag.date{ color:var(--ink-soft); }
+
+  .notes-block{ margin-top:12px; }
+  .notes-block dt{ font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--brass); font-weight:700; margin-top:10px; }
+  .notes-block dd{ margin:2px 0 0; font-size:14px; color:var(--ink); }
+
+  /* score + structure fingerprint (the signature) */
+  .aside{ display:flex; flex-direction:column; align-items:flex-end; gap:14px; min-width:132px; }
+  .score{
+    font-family:"Space Mono",monospace; font-weight:700; line-height:.9;
+    font-size:52px; color:var(--oxblood); text-align:right;
+  }
+  .score small{ display:block; font-size:10px; letter-spacing:.15em; text-transform:uppercase;
+    color:var(--ink-soft); font-weight:600; margin-top:4px; font-family:"Hanken Grotesk",sans-serif; }
+  .score.unscored{ color:var(--line); }
+
+  .fingerprint{ width:100%; }
+  .fp-row{ display:grid; grid-template-columns:52px 1fr; align-items:center; gap:8px; margin:5px 0; }
+  .fp-label{ font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); font-weight:600; }
+  .fp-track{ display:flex; gap:3px; }
+  .fp-seg{ height:8px; flex:1; background:var(--line); border-radius:1px; }
+  .fp-seg.on{ background:var(--brass); }
+
+  .card-actions{ display:flex; gap:8px; margin-top:6px; }
+  .icon-btn{ background:none; border:none; color:var(--ink-soft); cursor:pointer;
+    font-size:12px; font-weight:600; padding:4px 6px; letter-spacing:.04em; }
+  .icon-btn:hover{ color:var(--oxblood); text-decoration:underline; }
+
+  @media (max-width:640px){
+    .card{ grid-template-columns:1fr; }
+    .aside{ align-items:flex-start; flex-direction:row; justify-content:space-between; width:100%; }
+    .fingerprint{ max-width:220px; }
+  }
+
+  /* ---------- Empty / status ---------- */
+  .empty{ text-align:center; padding:56px 20px; color:var(--ink-soft); }
+  .empty h3{ font-family:"Fraunces",serif; color:var(--ink); font-weight:500; font-size:22px; margin:0 0 6px; }
+  .hidden{ display:none !important; }
+  .toast{
+    position:fixed; bottom:22px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:var(--paper); padding:11px 20px; border-radius:var(--radius);
+    font-size:13px; box-shadow:var(--shadow); opacity:0; pointer-events:none; transition:opacity .25s; z-index:50;
+  }
+  .toast.show{ opacity:1; }
+  footer.foot{ margin-top:40px; padding-top:16px; border-top:1px solid var(--line);
+    font-size:12px; color:var(--ink-soft); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Personal Cellar Book</p>
+    <h1>Tasting Log</h1>
+    <div class="meta">
+      <span><b id="stat-count">0</b> wines logged</span>
+      <span>Avg score <b id="stat-avg">—</b></span>
+      <span>Top <b id="stat-top">—</b></span>
+    </div>
+  </header>
+
+  <!-- Toolbar: search, sort, add, export -->
+  <div class="toolbar">
+    <input type="search" id="search" placeholder="Search name, producer, region, grape, notes…" aria-label="Search tastings" />
+    <div class="sortgroup">
+      <label for="sort" style="margin:0;">Sort</label>
+      <select id="sort" aria-label="Sort entries">
+        <option value="date-desc">Newest first</option>
+        <option value="date-asc">Oldest first</option>
+        <option value="score-desc">Score, high → low</option>
+        <option value="score-asc">Score, low → high</option>
+        <option value="name-asc">Name, A → Z</option>
+      </select>
+    </div>
+    <button class="btn primary" id="new-btn">+ New tasting</button>
+    <button class="btn ghost" id="export-btn">Export CSV</button>
+  </div>
+
+  <!-- Entry form (hidden until "New tasting" / "Edit") -->
+  <section class="panel hidden" id="form-panel">
+    <h2 id="form-title">New tasting</h2>
+    <form id="entry-form">
+      <input type="hidden" id="f-id" />
+      <div class="grid">
+        <div class="col-2"><label for="f-vintage">Vintage</label><input id="f-vintage" placeholder="2016" /></div>
+        <div class="col-6"><label for="f-name">Wine *</label><input id="f-name" required placeholder="Duluc de Branaire-Ducru" /></div>
+        <div class="col-4"><label for="f-producer">Producer</label><input id="f-producer" placeholder="Branaire-Ducru" /></div>
+
+        <div class="col-4"><label for="f-region">Region / appellation</label><input id="f-region" placeholder="Saint-Julien, Bordeaux" /></div>
+        <div class="col-4"><label for="f-grape">Grape / type</label><input id="f-grape" placeholder="Cabernet-dominant blend" /></div>
+        <div class="col-2"><label for="f-price">Price</label><input id="f-price" placeholder="$45" /></div>
+        <div class="col-2"><label for="f-date">Date tasted</label><input id="f-date" type="date" /></div>
+
+        <div class="col-6"><label for="f-nose">Nose</label><textarea id="f-nose" placeholder="Cherry, plum, violet…"></textarea></div>
+        <div class="col-6"><label for="f-palate">Palate</label><textarea id="f-palate" placeholder="Firm tannins, dry finish, earthy / cedar oak…"></textarea></div>
+
+        <div class="col-12">
+          <label>Structure (1 = low · 5 = high)</label>
+          <div class="gauge-row">
+            <div class="gauge-field"><label for="f-body" style="font-size:10px;">Body</label><select id="f-body"></select></div>
+            <div class="gauge-field"><label for="f-tannin" style="font-size:10px;">Tannin</label><select id="f-tannin"></select></div>
+            <div class="gauge-field"><label for="f-acidity" style="font-size:10px;">Acidity</label><select id="f-acidity"></select></div>
+            <div class="gauge-field"><label for="f-finish" style="font-size:10px;">Finish</label><select id="f-finish"></select></div>
+          </div>
+        </div>
+
+        <div class="col-9"><label for="f-notes">Overall notes</label><textarea id="f-notes" placeholder="Verdict, food pairing, whether to buy again…"></textarea></div>
+        <div class="col-3"><label for="f-score">Score / 100</label><input id="f-score" type="number" min="0" max="100" placeholder="—" /></div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn primary" id="save-btn">Save tasting</button>
+        <button type="button" class="btn ghost" id="cancel-btn">Cancel</button>
+      </div>
+    </form>
+  </section>
+
+  <p class="count" id="count-label"></p>
+  <div class="cards" id="cards"></div>
+
+  <div class="empty hidden" id="empty">
+    <h3>No tastings yet</h3>
+    <p>Pour something and hit <b>+ New tasting</b> to start the book.</p>
+  </div>
+
+  <footer class="foot">
+    <span>Saved on this device · persists across sessions.</span>
+    <span>Export to CSV to back up or open in Excel.</span>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =================================================================
+   WINE TASTING LOG — standalone build.
+   Data is stored in the browser's localStorage: it lives on THIS
+   device, in THIS browser, and persists across sessions. It is not
+   synced anywhere, so use "Export CSV" to back up.
+   ================================================================= */
+
+const KEY = "wine-log:entries";   // the localStorage slot holding all entries
+let entries = [];                 // in-memory copy we render from
+
+/* ---- 1. STORAGE HELPERS (localStorage is synchronous) ---------- */
+function loadEntries(){
+  try{
+    const raw = localStorage.getItem(KEY);   // string | null
+    if(raw === null){                         // nothing saved yet → first run
+      entries = seed();
+      saveEntries();
+    }else{
+      entries = JSON.parse(raw);
+    }
+  }catch(e){
+    console.error(e);
+    entries = seed();
+  }
+}
+function saveEntries(){
+  try{
+    localStorage.setItem(KEY, JSON.stringify(entries));
+  }catch(e){
+    // Safari private mode / quota exceeded land here
+    toast("Couldn't save — storage full or private mode");
+    console.error(e);
+  }
+}
+
+/* ---- 2. SAMPLE SEED (only used on the very first run) ---------- */
+function seed(){
+  return [{
+    id: uid(),
+    vintage: "2016",
+    name: "Duluc de Branaire-Ducru",
+    producer: "Branaire-Ducru (second wine)",
+    region: "Saint-Julien, Bordeaux",
+    grape: "Cabernet-dominant Bordeaux blend",
+    price: "",
+    date: "",
+    nose: "Cherry, plum, violet (the floral note).",
+    palate: "Firm tannins up front, slightly dry finish, medium body, earthy with cedar/oak.",
+    body: 3, tannin: 4, acidity: 3, finish: 3,
+    notes: "Second wine of Branaire-Ducru — built lighter than the grand vin, so read the medium body as format, not quality. 2016 is a structured Left Bank vintage; decant 30–60 min to soften the finish.",
+    score: null
+  }];
+}
+
+/* ---- 3. SMALL UTILITIES ---------------------------------------- */
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function esc(s){ return (s||"").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), 1900);
+}
+// options 1–5 for the four structure dropdowns
+const gaugeOptions = ['<option value="">–</option>']
+  .concat([1,2,3,4,5].map(n=>`<option value="${n}">${n}</option>`)).join("");
+
+/* ---- 4. RENDER ------------------------------------------------- */
+function structureStrip(e){
+  const rows = [["Body",e.body],["Tannin",e.tannin],["Acidity",e.acidity],["Finish",e.finish]];
+  if(!rows.some(([,v]) => v)) return "";
+  return `<div class="fingerprint">${rows.map(([label,v])=>{
+    const segs = [1,2,3,4,5].map(i=>`<span class="fp-seg ${v&&i<=v?'on':''}"></span>`).join("");
+    return `<div class="fp-row"><span class="fp-label">${label}</span><span class="fp-track">${segs}</span></div>`;
+  }).join("")}</div>`;
+}
+
+function cardHTML(e){
+  const tags = [e.region, e.grape, e.price].filter(Boolean)
+    .map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+  const dateTag = e.date ? `<span class="tag date">${esc(e.date)}</span>` : "";
+  const scoreHTML = (e.score===null||e.score==="")
+    ? `<div class="score unscored">—<small>Unscored</small></div>`
+    : `<div class="score">${esc(String(e.score))}<small>/ 100</small></div>`;
+  const noseDD    = e.nose   ? `<dt>Nose</dt><dd>${esc(e.nose)}</dd>` : "";
+  const palateDD  = e.palate ? `<dt>Palate</dt><dd>${esc(e.palate)}</dd>` : "";
+  const notesDD   = e.notes  ? `<dt>Notes</dt><dd>${esc(e.notes)}</dd>` : "";
+
+  return `<article class="card">
+    <div class="body">
+      <div class="vintage-name">
+        ${e.vintage?`<span class="vintage">${esc(e.vintage)}</span>`:""}
+        <h3 class="wine-name">${esc(e.name)}</h3>
+      </div>
+      ${e.producer?`<p class="producer">${esc(e.producer)}</p>`:""}
+      <div class="tags">${tags}${dateTag}</div>
+      <dl class="notes-block">${noseDD}${palateDD}${notesDD}</dl>
+      <div class="card-actions">
+        <button class="icon-btn" data-edit="${e.id}">Edit</button>
+        <button class="icon-btn" data-del="${e.id}">Delete</button>
+      </div>
+    </div>
+    <div class="aside">
+      ${scoreHTML}
+      ${structureStrip(e)}
+    </div>
+  </article>`;
+}
+
+function currentView(){
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const sort = document.getElementById("sort").value;
+  let list = entries.filter(e=>{
+    if(!q) return true;
+    return [e.name,e.producer,e.region,e.grape,e.nose,e.palate,e.notes,e.vintage]
+      .filter(Boolean).join(" ").toLowerCase().includes(q);
+  });
+  const num = v => (v===null||v==="") ? -1 : Number(v);
+  const cmp = {
+    "date-desc": (a,b)=> (b.date||"").localeCompare(a.date||"") || b.id.localeCompare(a.id),
+    "date-asc":  (a,b)=> (a.date||"").localeCompare(b.date||"") || a.id.localeCompare(b.id),
+    "score-desc":(a,b)=> num(b.score)-num(a.score),
+    "score-asc": (a,b)=> num(a.score)-num(b.score),
+    "name-asc":  (a,b)=> (a.name||"").localeCompare(b.name||""),
+  }[sort];
+  return list.sort(cmp);
+}
+
+function render(){
+  const list = currentView();
+  const cards = document.getElementById("cards");
+  const empty = document.getElementById("empty");
+  const countLabel = document.getElementById("count-label");
+
+  cards.innerHTML = list.map(cardHTML).join("");
+  empty.classList.toggle("hidden", entries.length>0);
+  countLabel.textContent = entries.length ? `Showing ${list.length} of ${entries.length}` : "";
+
+  cards.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openForm(b.dataset.edit));
+  cards.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>del(b.dataset.del));
+
+  const scored = entries.filter(e=>e.score!==null && e.score!=="");
+  document.getElementById("stat-count").textContent = entries.length;
+  document.getElementById("stat-avg").textContent = scored.length
+    ? Math.round(scored.reduce((s,e)=>s+Number(e.score),0)/scored.length) : "—";
+  const top = scored.slice().sort((a,b)=>Number(b.score)-Number(a.score))[0];
+  document.getElementById("stat-top").textContent = top ? `${top.name} (${top.score})` : "—";
+}
+
+/* ---- 5. FORM: open / save / cancel ----------------------------- */
+const panel = document.getElementById("form-panel");
+const form  = document.getElementById("entry-form");
+
+function openForm(id){
+  panel.classList.remove("hidden");
+  document.getElementById("form-title").textContent = id ? "Edit tasting" : "New tasting";
+  const e = id ? entries.find(x=>x.id===id) : {};
+  document.getElementById("f-id").value      = id || "";
+  document.getElementById("f-vintage").value = e.vintage||"";
+  document.getElementById("f-name").value    = e.name||"";
+  document.getElementById("f-producer").value= e.producer||"";
+  document.getElementById("f-region").value  = e.region||"";
+  document.getElementById("f-grape").value   = e.grape||"";
+  document.getElementById("f-price").value   = e.price||"";
+  document.getElementById("f-date").value    = e.date||"";
+  document.getElementById("f-nose").value    = e.nose||"";
+  document.getElementById("f-palate").value  = e.palate||"";
+  document.getElementById("f-body").value    = e.body||"";
+  document.getElementById("f-tannin").value  = e.tannin||"";
+  document.getElementById("f-acidity").value = e.acidity||"";
+  document.getElementById("f-finish").value  = e.finish||"";
+  document.getElementById("f-notes").value   = e.notes||"";
+  document.getElementById("f-score").value   = (e.score===null||e.score===undefined)?"":e.score;
+  panel.scrollIntoView({behavior:"smooth", block:"start"});
+  document.getElementById("f-name").focus();
+}
+function closeForm(){ panel.classList.add("hidden"); form.reset(); }
+
+form.addEventListener("submit", ev=>{
+  ev.preventDefault();
+  const num = id => { const v=document.getElementById(id).value; return v===""?"":Number(v); };
+  const id = document.getElementById("f-id").value;
+  const rec = {
+    id: id || uid(),
+    vintage:  document.getElementById("f-vintage").value.trim(),
+    name:     document.getElementById("f-name").value.trim(),
+    producer: document.getElementById("f-producer").value.trim(),
+    region:   document.getElementById("f-region").value.trim(),
+    grape:    document.getElementById("f-grape").value.trim(),
+    price:    document.getElementById("f-price").value.trim(),
+    date:     document.getElementById("f-date").value,
+    nose:     document.getElementById("f-nose").value.trim(),
+    palate:   document.getElementById("f-palate").value.trim(),
+    body:num("f-body"), tannin:num("f-tannin"), acidity:num("f-acidity"), finish:num("f-finish"),
+    notes:    document.getElementById("f-notes").value.trim(),
+    score:    document.getElementById("f-score").value===""?null:Number(document.getElementById("f-score").value),
+  };
+  if(id){ entries = entries.map(x=>x.id===id?rec:x); }
+  else  { entries.unshift(rec); }
+  saveEntries(); closeForm(); render();
+  toast(id ? "Tasting updated" : "Tasting saved");
+});
+
+function del(id){
+  const e = entries.find(x=>x.id===id);
+  if(!confirm(`Delete "${e?.name||"this tasting"}"? This can't be undone.`)) return;
+  entries = entries.filter(x=>x.id!==id);
+  saveEntries(); render();
+  toast("Tasting deleted");
+}
+
+/* ---- 6. CSV EXPORT (backup / open in Excel) -------------------- */
+function exportCSV(){
+  if(!entries.length){ toast("Nothing to export yet"); return; }
+  const cols = ["vintage","name","producer","region","grape","price","date",
+                "nose","palate","body","tannin","acidity","finish","score","notes"];
+  const escCell = v => {
+    v = (v===null||v===undefined) ? "" : String(v);
+    return /[",\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v;
+  };
+  const rows = [cols.join(",")].concat(entries.map(e=>cols.map(c=>escCell(e[c])).join(",")));
+  const blob = new Blob([rows.join("\n")], {type:"text/csv"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "tasting-log.csv"; a.click();
+  URL.revokeObjectURL(url);
+  toast("CSV exported");
+}
+
+/* ---- 7. WIRE UP & START ---------------------------------------- */
+["f-body","f-tannin","f-acidity","f-finish"].forEach(id=>{
+  document.getElementById(id).innerHTML = gaugeOptions;
+});
+document.getElementById("new-btn").onclick   = ()=>openForm(null);
+document.getElementById("cancel-btn").onclick= closeForm;
+document.getElementById("export-btn").onclick= exportCSV;
+document.getElementById("search").oninput    = render;
+document.getElementById("sort").onchange     = render;
+
+loadEntries();
+render();
+</script>
+</body>
+</html>
