@@ -19,194 +19,143 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
 <style>
-  /* ============================================================
-     DESIGN TOKENS  — every color/size lives here so it's easy to change
-     ============================================================ */
   :root{
-    --paper:      #F2EFE8;   /* page background — warm tasting-sheet paper   */
-    --paper-2:    #FBFAF6;   /* cards / raised surfaces                       */
-    --ink:        #1B1A17;   /* primary text                                 */
-    --ink-soft:   #6A655C;   /* labels, secondary text                       */
-    --oxblood:    #6B1220;   /* the wine accent — scores, active states      */
-    --oxblood-2:  #8A2130;   /* lighter oxblood for hovers                   */
-    --brass:      #9C7A2E;   /* hairline rules & structure gauges            */
-    --slate:      #3C4749;   /* secondary accent                             */
-    --line:       #DAD5C9;   /* dividers                                      */
-    --danger:     #8A2130;
-
-    --radius: 4px;
-    --shadow: 0 1px 2px rgba(27,26,23,.05), 0 8px 24px rgba(27,26,23,.06);
+    --paper:#F2EFE8; --paper-2:#FBFAF6; --ink:#1B1A17; --ink-soft:#6A655C;
+    --oxblood:#6B1220; --oxblood-2:#8A2130; --brass:#9C7A2E; --slate:#3C4749;
+    --line:#DAD5C9; --danger:#8A2130; --radius:4px;
+    --shadow:0 1px 2px rgba(27,26,23,.05), 0 8px 24px rgba(27,26,23,.06);
   }
-
   *{ box-sizing:border-box; }
   html{ -webkit-text-size-adjust:100%; }
-  body{
-    margin:0;
-    background:var(--paper);
-    color:var(--ink);
-    font-family:"Hanken Grotesk", system-ui, sans-serif;
-    line-height:1.5;
-    /* respect iOS notch/safe areas when installed full-screen */
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  }
-  @media (prefers-reduced-motion: reduce){
-    *{ animation:none !important; transition:none !important; }
-  }
-
+  body{ margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Hanken Grotesk",system-ui,sans-serif; line-height:1.5;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  @media (prefers-reduced-motion: reduce){ *{ animation:none!important; transition:none!important; } }
   .wrap{ max-width:1080px; margin:0 auto; padding:32px 20px 80px; }
 
+  /* ---------- Auth gate ---------- */
+  .gate{ max-width:410px; margin:14vh auto; padding:0 22px; text-align:center; }
+  .gate .eyebrow{ font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--oxblood); font-weight:700; margin:0 0 8px; }
+  .gate h1{ font-family:"Fraunces",serif; font-weight:600; font-size:40px; margin:0 0 10px; letter-spacing:-.01em; }
+  .gate p{ color:var(--ink-soft); font-size:14px; margin:0 auto; max-width:32ch; }
+  .gate form{ margin-top:22px; display:flex; flex-direction:column; gap:10px; text-align:left; }
+  .gate .msg{ font-size:13px; margin-top:12px; min-height:18px; color:var(--slate); }
+  .gate .msg.err{ color:var(--danger); }
+
   /* ---------- Masthead ---------- */
-  header.masthead{
-    border-bottom:2px solid var(--ink);
-    padding-bottom:16px;
-    margin-bottom:8px;
-  }
-  .eyebrow{
-    font-size:11px; letter-spacing:.22em; text-transform:uppercase;
-    color:var(--oxblood); font-weight:700; margin:0 0 6px;
-  }
-  h1{
-    font-family:"Fraunces", Georgia, serif;
-    font-weight:600; font-size:clamp(30px,5vw,46px);
-    margin:0; letter-spacing:-.01em; line-height:1.02;
-  }
-  .masthead .meta{
-    display:flex; gap:18px; flex-wrap:wrap; align-items:baseline;
-    margin-top:10px; color:var(--ink-soft); font-size:13px;
-  }
+  header.masthead{ border-bottom:2px solid var(--ink); padding-bottom:16px; margin-bottom:8px; }
+  .masthead-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .eyebrow{ font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--oxblood); font-weight:700; margin:0 0 6px; }
+  h1{ font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:clamp(30px,5vw,46px); margin:0; letter-spacing:-.01em; line-height:1.02; }
+  .whoami{ text-align:right; font-size:12px; color:var(--ink-soft); white-space:nowrap; }
+  .signout{ background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:12px; font-weight:600; text-decoration:underline; padding:2px 0; }
+  .signout:hover{ color:var(--oxblood); }
+  .masthead .meta{ display:flex; gap:18px; flex-wrap:wrap; align-items:baseline; margin-top:10px; color:var(--ink-soft); font-size:13px; }
   .masthead .meta b{ color:var(--ink); font-family:"Space Mono",monospace; }
 
   /* ---------- Toolbar ---------- */
-  .toolbar{
-    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
-    margin:20px 0 24px;
-  }
-  .toolbar input[type=search]{
-    flex:1 1 220px; min-width:180px;
-  }
+  .toolbar{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:20px 0 24px; }
+  .toolbar input[type=search]{ flex:1 1 220px; min-width:180px; }
   select, input, textarea, button{ font-family:inherit; font-size:14px; }
-  input, select, textarea{
-    background:var(--paper-2); border:1px solid var(--line);
-    border-radius:var(--radius); padding:9px 11px; color:var(--ink);
-    width:100%;
-  }
-  input:focus, select:focus, textarea:focus{
-    outline:2px solid var(--oxblood); outline-offset:1px; border-color:transparent;
-  }
-  label{ display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
-    color:var(--ink-soft); font-weight:600; margin-bottom:5px; }
-
-  .btn{
-    background:var(--ink); color:var(--paper); border:1px solid var(--ink);
-    border-radius:var(--radius); padding:9px 16px; font-weight:600; cursor:pointer;
-    width:auto; white-space:nowrap; transition:background .15s;
-  }
+  input, select, textarea{ background:var(--paper-2); border:1px solid var(--line); border-radius:var(--radius); padding:9px 11px; color:var(--ink); width:100%; }
+  input:focus, select:focus, textarea:focus{ outline:2px solid var(--oxblood); outline-offset:1px; border-color:transparent; }
+  label{ display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); font-weight:600; margin-bottom:5px; }
+  .btn{ background:var(--ink); color:var(--paper); border:1px solid var(--ink); border-radius:var(--radius); padding:9px 16px; font-weight:600; cursor:pointer; width:auto; white-space:nowrap; transition:background .15s; }
   .btn:hover{ background:#000; }
   .btn.primary{ background:var(--oxblood); border-color:var(--oxblood); }
   .btn.primary:hover{ background:var(--oxblood-2); }
   .btn.ghost{ background:transparent; color:var(--ink); border-color:var(--line); }
   .btn.ghost:hover{ border-color:var(--ink); }
+  .btn:disabled{ opacity:.5; cursor:not-allowed; }
   .btn:focus-visible{ outline:2px solid var(--oxblood); outline-offset:2px; }
-
   .sortgroup{ display:flex; align-items:center; gap:6px; }
   .sortgroup select{ width:auto; }
 
-  /* ---------- Entry form ---------- */
-  .panel{
-    background:var(--paper-2); border:1px solid var(--line);
-    border-radius:var(--radius); box-shadow:var(--shadow);
-    padding:22px; margin-bottom:28px;
-  }
-  .panel h2{
-    font-family:"Fraunces",serif; font-weight:600; font-size:20px; margin:0 0 16px;
-    display:flex; align-items:center; gap:10px;
-  }
+  /* ---------- Form ---------- */
+  .panel{ background:var(--paper-2); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:22px; margin-bottom:28px; }
+  .panel h2{ font-family:"Fraunces",serif; font-weight:600; font-size:20px; margin:0 0 16px; display:flex; align-items:center; gap:10px; }
   .panel h2::before{ content:""; width:22px; height:2px; background:var(--oxblood); display:inline-block; }
   .grid{ display:grid; grid-template-columns:repeat(12,1fr); gap:14px; }
-  .col-2{ grid-column:span 2; } .col-3{ grid-column:span 3; }
-  .col-4{ grid-column:span 4; } .col-6{ grid-column:span 6; }
-  .col-9{ grid-column:span 9; } .col-12{ grid-column:span 12; }
+  .col-2{ grid-column:span 2; } .col-3{ grid-column:span 3; } .col-4{ grid-column:span 4; }
+  .col-6{ grid-column:span 6; } .col-9{ grid-column:span 9; } .col-12{ grid-column:span 12; }
   @media (max-width:640px){ [class^=col-]{ grid-column:span 12 !important; } }
   textarea{ resize:vertical; min-height:60px; }
   .form-actions{ display:flex; gap:10px; margin-top:18px; }
-
-  /* structure gauge inputs (1–5) */
   .gauge-row{ display:flex; gap:14px; flex-wrap:wrap; }
   .gauge-field{ flex:1 1 120px; }
   .gauge-field select{ font-family:"Space Mono",monospace; }
 
-  /* ---------- Entry cards ---------- */
-  .count{ font-size:12px; color:var(--ink-soft); text-transform:uppercase;
-    letter-spacing:.12em; margin:0 0 14px; font-weight:600; }
+  /* ---------- Cards ---------- */
+  .count{ font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.12em; margin:0 0 14px; font-weight:600; }
   .cards{ display:flex; flex-direction:column; gap:16px; }
-  .card{
-    background:var(--paper-2); border:1px solid var(--line);
-    border-radius:var(--radius); box-shadow:var(--shadow);
-    padding:20px 22px; display:grid; grid-template-columns:1fr auto; gap:18px;
-  }
+  .card{ background:var(--paper-2); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:20px 22px; display:grid; grid-template-columns:1fr auto; gap:18px; }
   .card .body{ min-width:0; }
   .vintage-name{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
   .vintage{ font-family:"Space Mono",monospace; font-size:14px; color:var(--oxblood); font-weight:700; }
   .wine-name{ font-family:"Fraunces",serif; font-size:22px; font-weight:600; margin:0; letter-spacing:-.01em; }
   .producer{ color:var(--ink-soft); font-size:13px; margin:2px 0 0; }
   .tags{ display:flex; gap:8px; flex-wrap:wrap; margin:12px 0 4px; }
-  .tag{ font-size:11px; letter-spacing:.05em; text-transform:uppercase; font-weight:600;
-    color:var(--slate); border:1px solid var(--line); border-radius:999px; padding:3px 10px; }
+  .tag{ font-size:11px; letter-spacing:.05em; text-transform:uppercase; font-weight:600; color:var(--slate); border:1px solid var(--line); border-radius:999px; padding:3px 10px; }
   .tag.date{ color:var(--ink-soft); }
-
   .notes-block{ margin-top:12px; }
-  .notes-block dt{ font-size:10px; letter-spacing:.12em; text-transform:uppercase;
-    color:var(--brass); font-weight:700; margin-top:10px; }
+  .notes-block dt{ font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--brass); font-weight:700; margin-top:10px; }
   .notes-block dd{ margin:2px 0 0; font-size:14px; color:var(--ink); }
-
-  /* score + structure fingerprint (the signature) */
   .aside{ display:flex; flex-direction:column; align-items:flex-end; gap:14px; min-width:132px; }
-  .score{
-    font-family:"Space Mono",monospace; font-weight:700; line-height:.9;
-    font-size:52px; color:var(--oxblood); text-align:right;
-  }
-  .score small{ display:block; font-size:10px; letter-spacing:.15em; text-transform:uppercase;
-    color:var(--ink-soft); font-weight:600; margin-top:4px; font-family:"Hanken Grotesk",sans-serif; }
+  .score{ font-family:"Space Mono",monospace; font-weight:700; line-height:.9; font-size:52px; color:var(--oxblood); text-align:right; }
+  .score small{ display:block; font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--ink-soft); font-weight:600; margin-top:4px; font-family:"Hanken Grotesk",sans-serif; }
   .score.unscored{ color:var(--line); }
-
   .fingerprint{ width:100%; }
   .fp-row{ display:grid; grid-template-columns:52px 1fr; align-items:center; gap:8px; margin:5px 0; }
   .fp-label{ font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); font-weight:600; }
   .fp-track{ display:flex; gap:3px; }
   .fp-seg{ height:8px; flex:1; background:var(--line); border-radius:1px; }
   .fp-seg.on{ background:var(--brass); }
-
   .card-actions{ display:flex; gap:8px; margin-top:6px; }
-  .icon-btn{ background:none; border:none; color:var(--ink-soft); cursor:pointer;
-    font-size:12px; font-weight:600; padding:4px 6px; letter-spacing:.04em; }
+  .icon-btn{ background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:12px; font-weight:600; padding:4px 6px; letter-spacing:.04em; }
   .icon-btn:hover{ color:var(--oxblood); text-decoration:underline; }
-
   @media (max-width:640px){
     .card{ grid-template-columns:1fr; }
     .aside{ align-items:flex-start; flex-direction:row; justify-content:space-between; width:100%; }
     .fingerprint{ max-width:220px; }
   }
-
-  /* ---------- Empty / status ---------- */
   .empty{ text-align:center; padding:56px 20px; color:var(--ink-soft); }
   .empty h3{ font-family:"Fraunces",serif; color:var(--ink); font-weight:500; font-size:22px; margin:0 0 6px; }
   .hidden{ display:none !important; }
-  .toast{
-    position:fixed; bottom:22px; left:50%; transform:translateX(-50%);
-    background:var(--ink); color:var(--paper); padding:11px 20px; border-radius:var(--radius);
-    font-size:13px; box-shadow:var(--shadow); opacity:0; pointer-events:none; transition:opacity .25s; z-index:50;
-  }
+  .toast{ position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--paper); padding:11px 20px; border-radius:var(--radius); font-size:13px; box-shadow:var(--shadow); opacity:0; pointer-events:none; transition:opacity .25s; z-index:50; }
   .toast.show{ opacity:1; }
-  footer.foot{ margin-top:40px; padding-top:16px; border-top:1px solid var(--line);
-    font-size:12px; color:var(--ink-soft); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+  footer.foot{ margin-top:40px; padding-top:16px; border-top:1px solid var(--line); font-size:12px; color:var(--ink-soft); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; }
 </style>
 </head>
 <body>
-<div class="wrap">
 
+<!-- ============ AUTH GATE (shown when logged out) ============ -->
+<div class="gate" id="auth-gate">
+  <p class="eyebrow">Personal Cellar Book</p>
+  <h1>Sign in</h1>
+  <p>Enter your email and we'll send a one-tap sign-in link. No password. Your log follows you to any device you sign in on.</p>
+  <form id="login-form">
+    <div>
+      <label for="email">Email</label>
+      <input id="email" type="email" required placeholder="you@example.com" autocomplete="email" />
+    </div>
+    <button type="submit" class="btn primary" id="login-btn">Email me a sign-in link</button>
+  </form>
+  <p class="msg" id="auth-msg"></p>
+</div>
+
+<!-- ============ MAIN APP (shown when logged in) ============ -->
+<div class="wrap hidden" id="app">
   <header class="masthead">
-    <p class="eyebrow">Personal Cellar Book</p>
-    <h1>Tasting Log</h1>
+    <div class="masthead-top">
+      <div>
+        <p class="eyebrow">Personal Cellar Book</p>
+        <h1>Tasting Log</h1>
+      </div>
+      <div class="whoami">
+        <div id="user-email"></div>
+        <button class="signout" id="signout-btn">Sign out</button>
+      </div>
+    </div>
     <div class="meta">
       <span><b id="stat-count">0</b> wines logged</span>
       <span>Avg score <b id="stat-avg">—</b></span>
@@ -214,7 +163,6 @@
     </div>
   </header>
 
-  <!-- Toolbar: search, sort, add, export -->
   <div class="toolbar">
     <input type="search" id="search" placeholder="Search name, producer, region, grape, notes…" aria-label="Search tastings" />
     <div class="sortgroup">
@@ -231,7 +179,6 @@
     <button class="btn ghost" id="export-btn">Export CSV</button>
   </div>
 
-  <!-- Entry form (hidden until "New tasting" / "Edit") -->
   <section class="panel hidden" id="form-panel">
     <h2 id="form-title">New tasting</h2>
     <form id="entry-form">
@@ -240,15 +187,12 @@
         <div class="col-2"><label for="f-vintage">Vintage</label><input id="f-vintage" placeholder="2016" /></div>
         <div class="col-6"><label for="f-name">Wine *</label><input id="f-name" required placeholder="Duluc de Branaire-Ducru" /></div>
         <div class="col-4"><label for="f-producer">Producer</label><input id="f-producer" placeholder="Branaire-Ducru" /></div>
-
         <div class="col-4"><label for="f-region">Region / appellation</label><input id="f-region" placeholder="Saint-Julien, Bordeaux" /></div>
         <div class="col-4"><label for="f-grape">Grape / type</label><input id="f-grape" placeholder="Cabernet-dominant blend" /></div>
         <div class="col-2"><label for="f-price">Price</label><input id="f-price" placeholder="$45" /></div>
         <div class="col-2"><label for="f-date">Date tasted</label><input id="f-date" type="date" /></div>
-
         <div class="col-6"><label for="f-nose">Nose</label><textarea id="f-nose" placeholder="Cherry, plum, violet…"></textarea></div>
         <div class="col-6"><label for="f-palate">Palate</label><textarea id="f-palate" placeholder="Firm tannins, dry finish, earthy / cedar oak…"></textarea></div>
-
         <div class="col-12">
           <label>Structure (1 = low · 5 = high)</label>
           <div class="gauge-row">
@@ -258,7 +202,6 @@
             <div class="gauge-field"><label for="f-finish" style="font-size:10px;">Finish</label><select id="f-finish"></select></div>
           </div>
         </div>
-
         <div class="col-9"><label for="f-notes">Overall notes</label><textarea id="f-notes" placeholder="Verdict, food pairing, whether to buy again…"></textarea></div>
         <div class="col-3"><label for="f-score">Score / 100</label><input id="f-score" type="number" min="0" max="100" placeholder="—" /></div>
       </div>
@@ -271,84 +214,140 @@
 
   <p class="count" id="count-label"></p>
   <div class="cards" id="cards"></div>
-
   <div class="empty hidden" id="empty">
     <h3>No tastings yet</h3>
     <p>Pour something and hit <b>+ New tasting</b> to start the book.</p>
   </div>
 
   <footer class="foot">
-    <span>Saved on this device · persists across sessions.</span>
-    <span>Export to CSV to back up or open in Excel.</span>
+    <span>Saved to your account · syncs to every device you sign in on.</span>
+    <span>Export to CSV anytime to back up or open in Excel.</span>
   </footer>
 </div>
 
 <div class="toast" id="toast"></div>
 
-<script>
+<script type="module">
 /* =================================================================
-   WINE TASTING LOG — standalone build.
-   Data is stored in the browser's localStorage: it lives on THIS
-   device, in THIS browser, and persists across sessions. It is not
-   synced anywhere, so use "Export CSV" to back up.
+   CELLAR BOOK — Supabase build.
+   Data now lives in a hosted Postgres database, not the browser.
+   Sign in on any device → same log. Row-level security in the
+   database guarantees you only ever see your own rows.
    ================================================================= */
 
-const KEY = "wine-log:entries";   // the localStorage slot holding all entries
-let entries = [];                 // in-memory copy we render from
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-/* ---- 1. STORAGE HELPERS (localStorage is synchronous) ---------- */
-function loadEntries(){
-  try{
-    const raw = localStorage.getItem(KEY);   // string | null
-    if(raw === null){                         // nothing saved yet → first run
-      entries = seed();
-      saveEntries();
-    }else{
-      entries = JSON.parse(raw);
-    }
-  }catch(e){
-    console.error(e);
-    entries = seed();
+/* ---- 0. CONFIG — paste your two values here --------------------
+   Supabase dashboard → Project Settings → API:
+     • Project URL      → SUPABASE_URL
+     • anon public key  → SUPABASE_ANON_KEY   (safe to be public — see note)
+   The anon key is DESIGNED to ship in frontend code. It can only do
+   what your row-level-security policies allow. NEVER paste the
+   "service_role" key here — that one bypasses security. */
+const SUPABASE_URL      = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR-ANON-PUBLIC-KEY";
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const TABLE = "tastings";
+let entries = [];   // in-memory copy of the current user's rows
+
+/* ---- 1. AUTH --------------------------------------------------- */
+const gate   = document.getElementById("auth-gate");
+const appEl  = document.getElementById("app");
+
+async function initAuth(){
+  // guard: remind me if I forgot to paste my keys
+  if(SUPABASE_URL.includes("YOUR-PROJECT")){
+    authMsg("Add your Supabase URL and anon key in the CONFIG block first.", true);
+    return;
+  }
+  const { data:{ session } } = await supabase.auth.getSession();
+  applySession(session);
+  // fires on login, logout, and when the magic-link redirect lands
+  supabase.auth.onAuthStateChange((_event, session)=> applySession(session));
+}
+
+function applySession(session){
+  const signedIn = !!session;
+  gate.classList.toggle("hidden", signedIn);
+  appEl.classList.toggle("hidden", !signedIn);
+  if(signedIn){
+    document.getElementById("user-email").textContent = session.user.email;
+    loadEntries().then(render);
+  }else{
+    entries = [];
   }
 }
-function saveEntries(){
-  try{
-    localStorage.setItem(KEY, JSON.stringify(entries));
-  }catch(e){
-    // Safari private mode / quota exceeded land here
-    toast("Couldn't save — storage full or private mode");
-    console.error(e);
-  }
+
+function authMsg(text, isErr){
+  const el = document.getElementById("auth-msg");
+  el.textContent = text; el.classList.toggle("err", !!isErr);
 }
 
-/* ---- 2. SAMPLE SEED (only used on the very first run) ---------- */
-function seed(){
-  return [{
-    id: uid(),
-    vintage: "2016",
-    name: "Duluc de Branaire-Ducru",
-    producer: "Branaire-Ducru (second wine)",
-    region: "Saint-Julien, Bordeaux",
-    grape: "Cabernet-dominant Bordeaux blend",
-    price: "",
-    date: "",
-    nose: "Cherry, plum, violet (the floral note).",
-    palate: "Firm tannins up front, slightly dry finish, medium body, earthy with cedar/oak.",
-    body: 3, tannin: 4, acidity: 3, finish: 3,
-    notes: "Second wine of Branaire-Ducru — built lighter than the grand vin, so read the medium body as format, not quality. 2016 is a structured Left Bank vintage; decant 30–60 min to soften the finish.",
-    score: null
-  }];
+document.getElementById("login-form").addEventListener("submit", async ev=>{
+  ev.preventDefault();
+  const email = document.getElementById("email").value.trim();
+  const btn = document.getElementById("login-btn");
+  btn.disabled = true; authMsg("Sending…", false);
+  // magic link: Supabase emails a one-time link that logs this browser in
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options:{ emailRedirectTo: window.location.href }
+  });
+  btn.disabled = false;
+  authMsg(error ? error.message : "Check your email for the sign-in link.", !!error);
+});
+
+document.getElementById("signout-btn").onclick = async ()=>{
+  await supabase.auth.signOut();
+};
+
+/* ---- 2. DATABASE READ/WRITE (replaces localStorage) ------------
+   Three async calls do all persistence now. Each returns {data,error};
+   we surface errors to a toast instead of failing silently. */
+async function loadEntries(){
+  document.getElementById("count-label").textContent = "Loading…";
+  const { data, error } = await supabase.from(TABLE).select("*");
+  if(error){ toast("Couldn't load — "+error.message); console.error(error); entries=[]; return; }
+  entries = data || [];
+}
+
+async function upsertEntry(rec){
+  // upsert = insert if new id, update if the id already exists
+  const { error } = await supabase.from(TABLE).upsert(toRow(rec));
+  if(error){ toast("Couldn't save — "+error.message); console.error(error); return false; }
+  return true;
+}
+
+async function deleteEntry(id){
+  const { error } = await supabase.from(TABLE).delete().eq("id", id);
+  if(error){ toast("Couldn't delete — "+error.message); console.error(error); return false; }
+  return true;
+}
+
+/* Convert an app record → a database row.
+   Empty strings become NULL so numeric/date columns stay clean.
+   We deliberately DON'T send user_id — the database fills it in
+   automatically (default auth.uid()) and RLS enforces it. */
+function toRow(e){
+  const n = v => (v===""||v===undefined||v===null) ? null : v;
+  return {
+    id:e.id, vintage:n(e.vintage), name:e.name, producer:n(e.producer),
+    region:n(e.region), grape:n(e.grape), price:n(e.price), date:n(e.date),
+    nose:n(e.nose), palate:n(e.palate),
+    body:n(e.body), tannin:n(e.tannin), acidity:n(e.acidity), finish:n(e.finish),
+    score:(e.score===null||e.score==="")?null:e.score, notes:n(e.notes)
+  };
 }
 
 /* ---- 3. SMALL UTILITIES ---------------------------------------- */
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
-function esc(s){ return (s||"").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function esc(s){ return (s==null?"":String(s)).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function toast(msg){
   const t = document.getElementById("toast");
   t.textContent = msg; t.classList.add("show");
-  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), 1900);
+  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), 2400);
 }
-// options 1–5 for the four structure dropdowns
 const gaugeOptions = ['<option value="">–</option>']
   .concat([1,2,3,4,5].map(n=>`<option value="${n}">${n}</option>`)).join("");
 
@@ -361,24 +360,18 @@ function structureStrip(e){
     return `<div class="fp-row"><span class="fp-label">${label}</span><span class="fp-track">${segs}</span></div>`;
   }).join("")}</div>`;
 }
-
 function cardHTML(e){
-  const tags = [e.region, e.grape, e.price].filter(Boolean)
-    .map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+  const tags = [e.region, e.grape, e.price].filter(Boolean).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
   const dateTag = e.date ? `<span class="tag date">${esc(e.date)}</span>` : "";
   const scoreHTML = (e.score===null||e.score==="")
     ? `<div class="score unscored">—<small>Unscored</small></div>`
     : `<div class="score">${esc(String(e.score))}<small>/ 100</small></div>`;
-  const noseDD    = e.nose   ? `<dt>Nose</dt><dd>${esc(e.nose)}</dd>` : "";
-  const palateDD  = e.palate ? `<dt>Palate</dt><dd>${esc(e.palate)}</dd>` : "";
-  const notesDD   = e.notes  ? `<dt>Notes</dt><dd>${esc(e.notes)}</dd>` : "";
-
+  const noseDD   = e.nose   ? `<dt>Nose</dt><dd>${esc(e.nose)}</dd>` : "";
+  const palateDD = e.palate ? `<dt>Palate</dt><dd>${esc(e.palate)}</dd>` : "";
+  const notesDD  = e.notes  ? `<dt>Notes</dt><dd>${esc(e.notes)}</dd>` : "";
   return `<article class="card">
     <div class="body">
-      <div class="vintage-name">
-        ${e.vintage?`<span class="vintage">${esc(e.vintage)}</span>`:""}
-        <h3 class="wine-name">${esc(e.name)}</h3>
-      </div>
+      <div class="vintage-name">${e.vintage?`<span class="vintage">${esc(e.vintage)}</span>`:""}<h3 class="wine-name">${esc(e.name)}</h3></div>
       ${e.producer?`<p class="producer">${esc(e.producer)}</p>`:""}
       <div class="tags">${tags}${dateTag}</div>
       <dl class="notes-block">${noseDD}${palateDD}${notesDD}</dl>
@@ -387,13 +380,9 @@ function cardHTML(e){
         <button class="icon-btn" data-del="${e.id}">Delete</button>
       </div>
     </div>
-    <div class="aside">
-      ${scoreHTML}
-      ${structureStrip(e)}
-    </div>
+    <div class="aside">${scoreHTML}${structureStrip(e)}</div>
   </article>`;
 }
-
 function currentView(){
   const q = document.getElementById("search").value.trim().toLowerCase();
   const sort = document.getElementById("sort").value;
@@ -412,24 +401,17 @@ function currentView(){
   }[sort];
   return list.sort(cmp);
 }
-
 function render(){
   const list = currentView();
   const cards = document.getElementById("cards");
-  const empty = document.getElementById("empty");
-  const countLabel = document.getElementById("count-label");
-
   cards.innerHTML = list.map(cardHTML).join("");
-  empty.classList.toggle("hidden", entries.length>0);
-  countLabel.textContent = entries.length ? `Showing ${list.length} of ${entries.length}` : "";
-
+  document.getElementById("empty").classList.toggle("hidden", entries.length>0);
+  document.getElementById("count-label").textContent = entries.length ? `Showing ${list.length} of ${entries.length}` : "";
   cards.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openForm(b.dataset.edit));
   cards.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>del(b.dataset.del));
-
   const scored = entries.filter(e=>e.score!==null && e.score!=="");
   document.getElementById("stat-count").textContent = entries.length;
-  document.getElementById("stat-avg").textContent = scored.length
-    ? Math.round(scored.reduce((s,e)=>s+Number(e.score),0)/scored.length) : "—";
+  document.getElementById("stat-avg").textContent = scored.length ? Math.round(scored.reduce((s,e)=>s+Number(e.score),0)/scored.length) : "—";
   const top = scored.slice().sort((a,b)=>Number(b.score)-Number(a.score))[0];
   document.getElementById("stat-top").textContent = top ? `${top.name} (${top.score})` : "—";
 }
@@ -437,95 +419,82 @@ function render(){
 /* ---- 5. FORM: open / save / cancel ----------------------------- */
 const panel = document.getElementById("form-panel");
 const form  = document.getElementById("entry-form");
-
 function openForm(id){
   panel.classList.remove("hidden");
   document.getElementById("form-title").textContent = id ? "Edit tasting" : "New tasting";
   const e = id ? entries.find(x=>x.id===id) : {};
-  document.getElementById("f-id").value      = id || "";
-  document.getElementById("f-vintage").value = e.vintage||"";
-  document.getElementById("f-name").value    = e.name||"";
-  document.getElementById("f-producer").value= e.producer||"";
-  document.getElementById("f-region").value  = e.region||"";
-  document.getElementById("f-grape").value   = e.grape||"";
-  document.getElementById("f-price").value   = e.price||"";
-  document.getElementById("f-date").value    = e.date||"";
-  document.getElementById("f-nose").value    = e.nose||"";
-  document.getElementById("f-palate").value  = e.palate||"";
-  document.getElementById("f-body").value    = e.body||"";
-  document.getElementById("f-tannin").value  = e.tannin||"";
-  document.getElementById("f-acidity").value = e.acidity||"";
-  document.getElementById("f-finish").value  = e.finish||"";
-  document.getElementById("f-notes").value   = e.notes||"";
-  document.getElementById("f-score").value   = (e.score===null||e.score===undefined)?"":e.score;
+  const set = (f,v)=> document.getElementById(f).value = (v===null||v===undefined)?"":v;
+  document.getElementById("f-id").value = id || "";
+  set("f-vintage",e.vintage); set("f-name",e.name); set("f-producer",e.producer);
+  set("f-region",e.region); set("f-grape",e.grape); set("f-price",e.price); set("f-date",e.date);
+  set("f-nose",e.nose); set("f-palate",e.palate);
+  set("f-body",e.body); set("f-tannin",e.tannin); set("f-acidity",e.acidity); set("f-finish",e.finish);
+  set("f-notes",e.notes); set("f-score",e.score);
   panel.scrollIntoView({behavior:"smooth", block:"start"});
   document.getElementById("f-name").focus();
 }
 function closeForm(){ panel.classList.add("hidden"); form.reset(); }
 
-form.addEventListener("submit", ev=>{
+form.addEventListener("submit", async ev=>{
   ev.preventDefault();
   const num = id => { const v=document.getElementById(id).value; return v===""?"":Number(v); };
   const id = document.getElementById("f-id").value;
   const rec = {
     id: id || uid(),
-    vintage:  document.getElementById("f-vintage").value.trim(),
-    name:     document.getElementById("f-name").value.trim(),
-    producer: document.getElementById("f-producer").value.trim(),
-    region:   document.getElementById("f-region").value.trim(),
-    grape:    document.getElementById("f-grape").value.trim(),
-    price:    document.getElementById("f-price").value.trim(),
-    date:     document.getElementById("f-date").value,
-    nose:     document.getElementById("f-nose").value.trim(),
-    palate:   document.getElementById("f-palate").value.trim(),
+    vintage:document.getElementById("f-vintage").value.trim(),
+    name:document.getElementById("f-name").value.trim(),
+    producer:document.getElementById("f-producer").value.trim(),
+    region:document.getElementById("f-region").value.trim(),
+    grape:document.getElementById("f-grape").value.trim(),
+    price:document.getElementById("f-price").value.trim(),
+    date:document.getElementById("f-date").value,
+    nose:document.getElementById("f-nose").value.trim(),
+    palate:document.getElementById("f-palate").value.trim(),
     body:num("f-body"), tannin:num("f-tannin"), acidity:num("f-acidity"), finish:num("f-finish"),
-    notes:    document.getElementById("f-notes").value.trim(),
-    score:    document.getElementById("f-score").value===""?null:Number(document.getElementById("f-score").value),
+    notes:document.getElementById("f-notes").value.trim(),
+    score:document.getElementById("f-score").value===""?null:Number(document.getElementById("f-score").value),
   };
+  const saveBtn = document.getElementById("save-btn");
+  saveBtn.disabled = true;
+  const ok = await upsertEntry(rec);
+  saveBtn.disabled = false;
+  if(!ok) return;                       // DB rejected → keep form open, error already shown
   if(id){ entries = entries.map(x=>x.id===id?rec:x); }
   else  { entries.unshift(rec); }
-  saveEntries(); closeForm(); render();
+  closeForm(); render();
   toast(id ? "Tasting updated" : "Tasting saved");
 });
 
-function del(id){
+async function del(id){
   const e = entries.find(x=>x.id===id);
   if(!confirm(`Delete "${e?.name||"this tasting"}"? This can't be undone.`)) return;
+  const ok = await deleteEntry(id);
+  if(!ok) return;
   entries = entries.filter(x=>x.id!==id);
-  saveEntries(); render();
-  toast("Tasting deleted");
+  render(); toast("Tasting deleted");
 }
 
-/* ---- 6. CSV EXPORT (backup / open in Excel) -------------------- */
+/* ---- 6. CSV EXPORT --------------------------------------------- */
 function exportCSV(){
   if(!entries.length){ toast("Nothing to export yet"); return; }
-  const cols = ["vintage","name","producer","region","grape","price","date",
-                "nose","palate","body","tannin","acidity","finish","score","notes"];
-  const escCell = v => {
-    v = (v===null||v===undefined) ? "" : String(v);
-    return /[",\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v;
-  };
+  const cols = ["vintage","name","producer","region","grape","price","date","nose","palate","body","tannin","acidity","finish","score","notes"];
+  const escCell = v => { v=(v==null)?"":String(v); return /[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v; };
   const rows = [cols.join(",")].concat(entries.map(e=>cols.map(c=>escCell(e[c])).join(",")));
   const blob = new Blob([rows.join("\n")], {type:"text/csv"});
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = "tasting-log.csv"; a.click();
-  URL.revokeObjectURL(url);
-  toast("CSV exported");
+  const a = document.createElement("a"); a.href=url; a.download="tasting-log.csv"; a.click();
+  URL.revokeObjectURL(url); toast("CSV exported");
 }
 
 /* ---- 7. WIRE UP & START ---------------------------------------- */
-["f-body","f-tannin","f-acidity","f-finish"].forEach(id=>{
-  document.getElementById(id).innerHTML = gaugeOptions;
-});
-document.getElementById("new-btn").onclick   = ()=>openForm(null);
-document.getElementById("cancel-btn").onclick= closeForm;
-document.getElementById("export-btn").onclick= exportCSV;
-document.getElementById("search").oninput    = render;
-document.getElementById("sort").onchange     = render;
+["f-body","f-tannin","f-acidity","f-finish"].forEach(id=>{ document.getElementById(id).innerHTML = gaugeOptions; });
+document.getElementById("new-btn").onclick    = ()=>openForm(null);
+document.getElementById("cancel-btn").onclick = closeForm;
+document.getElementById("export-btn").onclick = exportCSV;
+document.getElementById("search").oninput     = render;
+document.getElementById("sort").onchange      = render;
 
-loadEntries();
-render();
+initAuth();
 </script>
 </body>
 </html>
