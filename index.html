@@ -271,6 +271,7 @@
               <img id="f-photo-preview" class="photo-preview" alt="Label preview" />
               <input type="file" id="f-photo" accept="image/*" />
               <button type="button" class="icon-btn photo-remove hidden" id="f-photo-remove">Remove photo</button>
+              <button type="button" class="icon-btn hidden" id="f-scan-btn">Scan label</button>
             </div>
           </div>
           <div class="col-6">
@@ -322,6 +323,7 @@
               <img id="c-photo-preview" class="photo-preview" alt="Label preview" />
               <input type="file" id="c-photo" accept="image/*" />
               <button type="button" class="icon-btn photo-remove hidden" id="c-photo-remove">Remove photo</button>
+              <button type="button" class="icon-btn hidden" id="c-scan-btn">Scan label</button>
             </div>
           </div>
         </div>
@@ -743,6 +745,7 @@ function openForm(id, prefill){
 
   photoFile = null; photoRemoved = false; existingImagePath = e.image_path || null;
   document.getElementById("f-photo").value = "";
+  document.getElementById("f-scan-btn").classList.add("hidden");
   const preview = document.getElementById("f-photo-preview");
   const removeBtn = document.getElementById("f-photo-remove");
   if(e._imgUrl){
@@ -761,6 +764,7 @@ function closeForm(){
   photoFile = null; photoRemoved = false; existingImagePath = null;
   document.getElementById("f-photo-preview").classList.remove("show");
   document.getElementById("f-photo-remove").classList.add("hidden");
+  document.getElementById("f-scan-btn").classList.add("hidden");
 }
 
 form.addEventListener("submit", async ev=>{
@@ -966,6 +970,7 @@ function openCellarForm(id){
 
   cellarPhotoFile = null; cellarPhotoRemoved = false; cellarExistingImagePath = item.image_path || null;
   document.getElementById("c-photo").value = "";
+  document.getElementById("c-scan-btn").classList.add("hidden");
   const preview = document.getElementById("c-photo-preview");
   const removeBtn = document.getElementById("c-photo-remove");
   if(item._imgUrl){
@@ -984,6 +989,7 @@ function closeCellarForm(){
   cellarPhotoFile = null; cellarPhotoRemoved = false; cellarExistingImagePath = null;
   document.getElementById("c-photo-preview").classList.remove("show");
   document.getElementById("c-photo-remove").classList.add("hidden");
+  document.getElementById("c-scan-btn").classList.add("hidden");
 }
 
 cellarForm.addEventListener("submit", async ev=>{
@@ -1359,7 +1365,68 @@ function renderSharedGroups(){
   wireCardEvents(container, renderSharedGroups);
 }
 
-/* ---- 10. WIRE UP & START ---------------------------------------- */
+/* ---- 10. LABEL SCANNING -------------------------------------------
+   Reads only the factual fields off a label photo (vintage, name,
+   producer, region, grape) via the scan-label Edge Function — never
+   price, quantity, or anything you'd need to fill in yourself.
+   Shared by both the tasting and cellar forms, keyed by field prefix
+   ("f" or "c"). Only works on a freshly-picked photo, not one already
+   saved to Storage from a previous edit. */
+async function resizeImageForScan(file){
+  const MAX = 1024;
+  const bitmap = await createImageBitmap(file);
+  let { width, height } = bitmap;
+  if(width > MAX || height > MAX){
+    const scale = MAX / Math.max(width, height);
+    width = Math.round(width*scale); height = Math.round(height*scale);
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = width; canvas.height = height;
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
+  return await new Promise(res=>canvas.toBlob(res, "image/jpeg", 0.85));
+}
+
+function blobToBase64(blob){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onloadend = ()=> resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function scanLabel(file, prefix, btnId){
+  const btn = document.getElementById(btnId);
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = "Scanning…";
+  try{
+    const resized = await resizeImageForScan(file);
+    const imageBase64 = await blobToBase64(resized);
+    const { data, error } = await supabase.functions.invoke("scan-label", {
+      body: { imageBase64, mimeType: "image/jpeg" }
+    });
+    if(error){
+      let msg = error.message;
+      try{ const body = await error.context.json(); if(body?.error) msg = body.error; }catch(_){}
+      toast("Couldn't scan — "+msg);
+      return;
+    }
+    const set = (id,v)=>{ if(v){ document.getElementById(id).value = v; } };
+    set(`${prefix}-vintage`, data.vintage);
+    set(`${prefix}-name`, data.name);
+    set(`${prefix}-producer`, data.producer);
+    set(`${prefix}-region`, data.region);
+    set(`${prefix}-grape`, data.grape);
+    toast("Filled in from label");
+  }catch(err){
+    toast("Couldn't scan — "+err.message);
+    console.error(err);
+  }finally{
+    btn.disabled = false; btn.textContent = originalText;
+  }
+}
+
+/* ---- 11. WIRE UP & START ---------------------------------------- */
 ["f-body","f-tannin","f-acidity","f-finish"].forEach(id=>{ document.getElementById(id).innerHTML = gaugeOptions; });
 document.getElementById("new-btn").onclick    = ()=>openForm(null);
 document.getElementById("cancel-btn").onclick = closeForm;
@@ -1374,6 +1441,7 @@ document.getElementById("f-photo").onchange = ev=>{
   preview.src = URL.createObjectURL(file);
   preview.classList.add("show");
   document.getElementById("f-photo-remove").classList.remove("hidden");
+  document.getElementById("f-scan-btn").classList.remove("hidden");
 };
 document.getElementById("f-photo-remove").onclick = ()=>{
   photoFile = null; photoRemoved = true; existingImagePath = null;
@@ -1381,6 +1449,10 @@ document.getElementById("f-photo-remove").onclick = ()=>{
   const preview = document.getElementById("f-photo-preview");
   preview.src = ""; preview.classList.remove("show");
   document.getElementById("f-photo-remove").classList.add("hidden");
+  document.getElementById("f-scan-btn").classList.add("hidden");
+};
+document.getElementById("f-scan-btn").onclick = ()=>{
+  if(photoFile) scanLabel(photoFile, "f", "f-scan-btn");
 };
 document.getElementById("cellar-new-btn").onclick    = ()=>openCellarForm(null);
 document.getElementById("cellar-cancel-btn").onclick = closeCellarForm;
@@ -1392,6 +1464,7 @@ document.getElementById("c-photo").onchange = ev=>{
   preview.src = URL.createObjectURL(file);
   preview.classList.add("show");
   document.getElementById("c-photo-remove").classList.remove("hidden");
+  document.getElementById("c-scan-btn").classList.remove("hidden");
 };
 document.getElementById("c-photo-remove").onclick = ()=>{
   cellarPhotoFile = null; cellarPhotoRemoved = true; cellarExistingImagePath = null;
@@ -1399,6 +1472,10 @@ document.getElementById("c-photo-remove").onclick = ()=>{
   const preview = document.getElementById("c-photo-preview");
   preview.src = ""; preview.classList.remove("show");
   document.getElementById("c-photo-remove").classList.add("hidden");
+  document.getElementById("c-scan-btn").classList.add("hidden");
+};
+document.getElementById("c-scan-btn").onclick = ()=>{
+  if(cellarPhotoFile) scanLabel(cellarPhotoFile, "c", "c-scan-btn");
 };
 document.getElementById("connect-form").addEventListener("submit", async ev=>{
   ev.preventDefault();
