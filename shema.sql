@@ -567,3 +567,60 @@ create policy "select own or linked profile" on public.profiles
     or id in (select requester from public.household_requests where recipient = auth.uid())
     or id in (select recipient from public.household_requests where requester = auth.uid())
   );
+
+-- ============================================================
+--  13. CELLAR PHOTOS — a separate bucket from wine-labels, because
+--      access here follows the cellar table's own rules, not the
+--      tastings shared-flag rules: full read/write for you + your
+--      household, read-only for connections you've flipped cellar
+--      sharing on for. Object path: {added_by}/{cellar_item_id}.
+-- ============================================================
+alter table public.cellar add column if not exists image_path text;
+
+insert into storage.buckets (id, name, public)
+values ('cellar-photos', 'cellar-photos', false)
+on conflict (id) do nothing;
+
+drop policy if exists "cellar photos: household write" on storage.objects;
+create policy "cellar photos: household write" on storage.objects
+  for insert with check (
+    bucket_id = 'cellar-photos' and (
+      (storage.foldername(name))[1] = auth.uid()::text
+      or exists (select 1 from public.partners where owner = auth.uid() and partner::text = (storage.foldername(name))[1])
+    )
+  );
+
+drop policy if exists "cellar photos: household update" on storage.objects;
+create policy "cellar photos: household update" on storage.objects
+  for update using (
+    bucket_id = 'cellar-photos' and (
+      (storage.foldername(name))[1] = auth.uid()::text
+      or exists (select 1 from public.partners where owner = auth.uid() and partner::text = (storage.foldername(name))[1])
+    )
+  );
+
+drop policy if exists "cellar photos: household delete" on storage.objects;
+create policy "cellar photos: household delete" on storage.objects
+  for delete using (
+    bucket_id = 'cellar-photos' and (
+      (storage.foldername(name))[1] = auth.uid()::text
+      or exists (select 1 from public.partners where owner = auth.uid() and partner::text = (storage.foldername(name))[1])
+    )
+  );
+
+drop policy if exists "cellar photos: select own household or shared" on storage.objects;
+create policy "cellar photos: select own household or shared" on storage.objects
+  for select using (
+    bucket_id = 'cellar-photos' and (
+      (storage.foldername(name))[1] = auth.uid()::text
+      or exists (select 1 from public.partners where owner = auth.uid() and partner::text = (storage.foldername(name))[1])
+      or exists (
+        select 1 from public.connections c
+        where c.partner = auth.uid() and c.share_cellar = true
+          and (
+            c.owner::text = (storage.foldername(name))[1]
+            or exists (select 1 from public.partners p where p.owner = c.owner and p.partner::text = (storage.foldername(name))[1])
+          )
+      )
+    )
+  );
