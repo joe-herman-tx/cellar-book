@@ -270,3 +270,176 @@ create policy "delete own or partner cellar" on public.cellar
     added_by = auth.uid()
     or exists (select 1 from public.partners where owner = auth.uid() and partner = cellar.added_by)
   );
+
+-- ============================================================
+--  9. CONNECTIONS — self-service sharing with any number of
+--     friends/family, via search-by-email + request/accept.
+--     Deliberately a SEPARATE table from `partners`: `partners`
+--     means "household" (also grants cellar access); `connections`
+--     only ever grants tasting/comment visibility, never cellar.
+-- ============================================================
+create table if not exists public.connections (
+  owner   uuid not null references auth.users(id) on delete cascade,
+  partner uuid not null references auth.users(id) on delete cascade,
+  primary key (owner, partner)
+);
+alter table public.connections enable row level security;
+
+drop policy if exists "select own connection links" on public.connections;
+create policy "select own connection links" on public.connections
+  for select using ( auth.uid() = owner );
+
+create table if not exists public.connection_requests (
+  id         uuid primary key default gen_random_uuid(),
+  requester  uuid not null references auth.users(id) on delete cascade,
+  recipient  uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (requester, recipient)
+);
+alter table public.connection_requests enable row level security;
+
+drop policy if exists "select own requests" on public.connection_requests;
+create policy "select own requests" on public.connection_requests
+  for select using ( requester = auth.uid() or recipient = auth.uid() );
+
+drop policy if exists "send requests" on public.connection_requests;
+create policy "send requests" on public.connection_requests
+  for insert with check ( requester = auth.uid() and recipient <> auth.uid() );
+
+drop policy if exists "remove own requests" on public.connection_requests;
+create policy "remove own requests" on public.connection_requests
+  for delete using ( requester = auth.uid() or recipient = auth.uid() );
+-- No update policy — a request is only ever inserted, then either
+-- deleted (decline/cancel) or consumed by accept_connection_request().
+
+-- Exact, case-insensitive email lookup only — never partial/fuzzy —
+-- so the anon key can't be used to browse or enumerate every user.
+create or replace function public.find_user_by_email(lookup_email text)
+returns table(id uuid, email text)
+language sql
+security definer
+set search_path = public
+as $$
+  select id, email from public.profiles where lower(email) = lower(lookup_email) limit 1;
+$$;
+grant execute on function public.find_user_by_email(text) to authenticated;
+
+-- Atomic accept: verifies the caller is the recipient, links both
+-- directions in `connections`, and clears the request — one call
+-- instead of several client round-trips that could partially fail.
+create or replace function public.accept_connection_request(req_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  req record;
+begin
+  select * into req from public.connection_requests where id = req_id;
+  if req is null then
+    raise exception 'Request not found';
+  end if;
+  if req.recipient <> auth.uid() then
+    raise exception 'Not authorized to accept this request';
+  end if;
+  insert into public.connections (owner, partner) values
+    (req.requester, req.recipient),
+    (req.recipient, req.requester)
+  on conflict do nothing;
+  delete from public.connection_requests where id = req_id;
+end;
+$$;
+grant execute on function public.accept_connection_request(uuid) to authenticated;
+
+-- Unfriend: removes both directions regardless of which side calls
+-- it, scoped so you can only ever remove a connection involving you.
+create or replace function public.remove_connection(other uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.connections
+  where (owner = auth.uid() and partner = other)
+     or (owner = other and partner = auth.uid());
+end;
+$$;
+grant execute on function public.remove_connection(uuid) to authenticated;
+
+-- ============================================================
+--  10. WIDEN VISIBILITY — tastings/comments/storage/profiles now
+--      check `partners` (household) OR `connections` (self-service).
+--      `cellar` is deliberately NOT touched here — stays partners-only.
+-- ============================================================
+drop policy if exists "select shared with me" on public.tastings;
+create policy "select shared with me" on public.tastings
+  for select using (
+    shared = true
+    and (
+      exists (select 1 from public.partners where owner = auth.uid() and partner = tastings.user_id)
+      or exists (select 1 from public.connections where owner = auth.uid() and partner = tastings.user_id)
+    )
+  );
+
+drop policy if exists "select comments on visible tastings" on public.comments;
+create policy "select comments on visible tastings" on public.comments
+  for select using (
+    exists (
+      select 1 from public.tastings t
+      where t.id = comments.tasting_id
+        and (
+          t.user_id = auth.uid()
+          or (t.shared = true and (
+            exists (select 1 from public.partners where owner = auth.uid() and partner = t.user_id)
+            or exists (select 1 from public.connections where owner = auth.uid() and partner = t.user_id)
+          ))
+        )
+    )
+  );
+
+drop policy if exists "insert comments on visible tastings" on public.comments;
+create policy "insert comments on visible tastings" on public.comments
+  for insert with check (
+    user_id = auth.uid()
+    and exists (
+      select 1 from public.tastings t
+      where t.id = comments.tasting_id
+        and (
+          t.user_id = auth.uid()
+          or (t.shared = true and (
+            exists (select 1 from public.partners where owner = auth.uid() and partner = t.user_id)
+            or exists (select 1 from public.connections where owner = auth.uid() and partner = t.user_id)
+          ))
+        )
+    )
+  );
+
+drop policy if exists "labels: select own or shared" on storage.objects;
+create policy "labels: select own or shared" on storage.objects
+  for select using (
+    bucket_id = 'wine-labels' and (
+      (storage.foldername(name))[1] = auth.uid()::text
+      or exists (
+        select 1 from public.tastings t
+        where t.shared = true
+          and t.user_id::text = (storage.foldername(name))[1]
+          and t.id = split_part(name, '/', 2)
+          and (
+            exists (select 1 from public.partners where owner = auth.uid() and partner = t.user_id)
+            or exists (select 1 from public.connections where owner = auth.uid() and partner = t.user_id)
+          )
+      )
+    )
+  );
+
+drop policy if exists "select own or linked profile" on public.profiles;
+create policy "select own or linked profile" on public.profiles
+  for select using (
+    id = auth.uid()
+    or id in (select partner from public.partners where owner = auth.uid())
+    or id in (select partner from public.connections where owner = auth.uid())
+    or id in (select requester from public.connection_requests where recipient = auth.uid())
+    or id in (select recipient from public.connection_requests where requester = auth.uid())
+  );

@@ -74,6 +74,19 @@
   .chart{ margin-top:6px; }
   .chart-svg{ width:100%; height:auto; display:block; }
 
+  /* ---------- Connections ---------- */
+  .connect-form{ display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
+  .connect-form > div{ flex:1 1 240px; }
+  .conn-block{ margin-top:18px; }
+  .conn-heading{ font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); font-weight:700; margin:0 0 8px; }
+  .conn-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-top:1px solid var(--line); font-size:14px; }
+  .conn-row:first-of-type{ border-top:none; }
+  .conn-row .conn-actions{ display:flex; gap:6px; flex:0 0 auto; }
+  .shared-group{ margin-bottom:28px; }
+  .shared-group-title{ font-family:"Fraunces",serif; font-weight:600; font-size:18px; margin:0 0 12px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+  #connect-msg{ font-size:13px; margin-top:10px; min-height:18px; color:var(--slate); }
+  #connect-msg.err{ color:var(--danger); }
+
   /* ---------- Toolbar ---------- */
   .toolbar{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:20px 0 24px; }
   .toolbar input[type=search]{ flex:1 1 220px; min-width:180px; }
@@ -203,6 +216,7 @@
   <nav class="view-tabs">
     <button class="view-tab active" data-view="log">Tasting Log</button>
     <button class="view-tab" data-view="cellar">Cellar</button>
+    <button class="view-tab" data-view="shared">Shared</button>
     <button class="view-tab" data-view="stats">Stats</button>
   </nav>
 
@@ -260,7 +274,7 @@
             <label>Sharing</label>
             <div class="check-row">
               <input type="checkbox" id="f-shared" />
-              <label for="f-shared">Share with my wife (read-only for her)</label>
+              <label for="f-shared">Share with my connections (read-only for them)</label>
             </div>
           </div>
         </div>
@@ -312,6 +326,34 @@
     <div class="empty hidden" id="cellar-empty">
       <h3>Cellar's empty</h3>
       <p>Add a bottle you've bought but haven't opened yet.</p>
+    </div>
+  </section>
+
+  <section id="view-shared" class="hidden">
+    <section class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+        <h2>Connect with someone</h2>
+        <button type="button" class="btn ghost" id="connections-refresh-btn">Refresh</button>
+      </div>
+      <form class="connect-form" id="connect-form">
+        <div>
+          <label for="connect-email">Their email</label>
+          <input id="connect-email" type="email" required placeholder="friend@example.com" />
+        </div>
+        <button type="submit" class="btn primary">Send request</button>
+      </form>
+      <p class="msg" id="connect-msg"></p>
+
+      <div id="requests-incoming"></div>
+      <div id="requests-outgoing"></div>
+      <div id="connections-list"></div>
+    </section>
+
+    <p class="count" id="shared-count-label"></p>
+    <div id="shared-groups"></div>
+    <div class="empty hidden" id="shared-empty">
+      <h3>Nothing shared with you yet</h3>
+      <p>Once a connection marks a tasting as shared, it'll show up here.</p>
     </div>
   </section>
 
@@ -373,6 +415,9 @@ let photoRemoved = false;     // true if "Remove photo" was clicked on an existi
 let existingImagePath = null; // image_path already on the entry being edited
 let commentsByTasting = {};   // { tasting_id: [comment, ...] }
 let openThreads = new Set();  // tasting ids whose comment thread is expanded
+let connections = [];         // user_ids you're connected with (tasting/comment sharing only)
+let incomingRequests = [];    // connection_requests where you're the recipient
+let outgoingRequests = [];    // connection_requests where you're the requester
 
 /* ---- 1. AUTH --------------------------------------------------- */
 const gate   = document.getElementById("auth-gate");
@@ -397,10 +442,12 @@ function applySession(session){
   if(signedIn){
     currentUserId = session.user.id;
     document.getElementById("user-email").textContent = session.user.email;
-    Promise.all([loadEntries(), loadCellar()]).then(()=>{ render(); renderCellar(); });
+    Promise.all([loadEntries(), loadCellar(), loadConnectionsData()])
+      .then(()=>{ render(); renderCellar(); renderConnections(); });
   }else{
     currentUserId = null;
     entries = []; cellarItems = []; commentsByTasting = {}; openThreads = new Set();
+    connections = []; incomingRequests = []; outgoingRequests = [];
   }
 }
 
@@ -544,13 +591,13 @@ function structureStrip(e){
     return `<div class="fp-row"><span class="fp-label">${label}</span><span class="fp-track">${segs}</span></div>`;
   }).join("")}</div>`;
 }
-function cardHTML(e){
+function cardHTML(e, showOwnerTag=true){
   const tags = [e.region, e.grape, e.price].filter(Boolean).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
   const dateTag = e.date ? `<span class="tag date">${esc(e.date)}</span>` : "";
   const mine = e.user_id === currentUserId;
   const sharedTag = mine
     ? (e.shared ? `<span class="tag shared">Shared</span>` : "")
-    : `<span class="tag shared">Shared by ${esc(profiles[e.user_id] || "your partner")}</span>`;
+    : (showOwnerTag ? `<span class="tag shared">Shared by ${esc(profiles[e.user_id] || "a connection")}</span>` : "");
   const scoreHTML = (e.score===null||e.score==="")
     ? `<div class="score unscored">—<small>Unscored</small></div>`
     : `<div class="score">${esc(String(e.score))}<small>/ 100</small></div>`;
@@ -583,7 +630,7 @@ function commentsHTML(e){
   const open = openThreads.has(e.id);
   const items = list.map(c=>{
     const mineComment = c.user_id === currentUserId;
-    const author = mineComment ? "You" : (profiles[c.user_id] || "your partner");
+    const author = mineComment ? "You" : (profiles[c.user_id] || "a connection");
     const when = c.created_at ? new Date(c.created_at).toLocaleDateString() : "";
     return `<div class="comment">
       <div class="comment-meta"><b>${esc(author)}</b><span>${esc(when)}</span>${mineComment?`<button class="icon-btn" data-del-comment="${c.id}">Delete</button>`:""}</div>
@@ -601,10 +648,10 @@ function commentsHTML(e){
     </div>
   </div>`;
 }
-function currentView(){
+function currentView(base){
   const q = document.getElementById("search").value.trim().toLowerCase();
   const sort = document.getElementById("sort").value;
-  let list = entries.filter(e=>{
+  let list = base.filter(e=>{
     if(!q) return true;
     return [e.name,e.producer,e.region,e.grape,e.nose,e.palate,e.notes,e.vintage]
       .filter(Boolean).join(" ").toLowerCase().includes(q);
@@ -619,29 +666,36 @@ function currentView(){
   }[sort];
   return list.sort(cmp);
 }
-function render(){
-  const list = currentView();
-  const cards = document.getElementById("cards");
-  cards.innerHTML = list.map(cardHTML).join("");
-  document.getElementById("empty").classList.toggle("hidden", entries.length>0);
-  document.getElementById("count-label").textContent = entries.length ? `Showing ${list.length} of ${entries.length}` : "";
-  cards.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openForm(b.dataset.edit));
-  cards.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>del(b.dataset.del));
-  cards.querySelectorAll("[data-toggle-comments]").forEach(b=>b.onclick=()=>{
+/* Binds edit/delete/comment interactions for a rendered batch of cards.
+   Shared by the Tasting Log tab and the Shared tab's grouped cards —
+   `rerender` is whichever render function owns that batch of cards. */
+function wireCardEvents(root, rerender){
+  root.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openForm(b.dataset.edit));
+  root.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>del(b.dataset.del));
+  root.querySelectorAll("[data-toggle-comments]").forEach(b=>b.onclick=()=>{
     const id = b.dataset.toggleComments;
     openThreads.has(id) ? openThreads.delete(id) : openThreads.add(id);
-    render();
+    rerender();
   });
-  cards.querySelectorAll("[data-del-comment]").forEach(b=>b.onclick=()=>deleteComment(b.dataset.delComment));
-  cards.querySelectorAll(".comment-form").forEach(f=>f.onsubmit=async ev=>{
+  root.querySelectorAll("[data-del-comment]").forEach(b=>b.onclick=()=>deleteComment(b.dataset.delComment, rerender));
+  root.querySelectorAll(".comment-form").forEach(f=>f.onsubmit=async ev=>{
     ev.preventDefault();
     const textarea = f.querySelector("textarea");
     const body = textarea.value.trim();
     if(!body) return;
-    await postComment(f.dataset.commentFor, body);
+    await postComment(f.dataset.commentFor, body, rerender);
   });
-  // Stats reflect only tastings you logged yourself, not ones shared to you.
+}
+function render(){
+  // Tasting Log tab is owned-tastings-only now — shared-in tastings
+  // live in the Shared tab instead (see renderSharedGroups()).
   const mine = entries.filter(e=>e.user_id===currentUserId);
+  const list = currentView(mine);
+  const cards = document.getElementById("cards");
+  cards.innerHTML = list.map(e=>cardHTML(e)).join("");
+  document.getElementById("empty").classList.toggle("hidden", mine.length>0);
+  document.getElementById("count-label").textContent = mine.length ? `Showing ${list.length} of ${mine.length}` : "";
+  wireCardEvents(cards, render);
   const scored = mine.filter(e=>e.score!==null && e.score!=="");
   document.getElementById("stat-count").textContent = mine.length;
   document.getElementById("stat-avg").textContent = scored.length ? Math.round(scored.reduce((s,e)=>s+Number(e.score),0)/scored.length) : "—";
@@ -750,21 +804,21 @@ async function del(id){
   render(); toast("Tasting deleted");
 }
 
-async function postComment(tastingId, body){
+async function postComment(tastingId, body, rerender=render){
   const { data, error } = await supabase.from("comments")
     .insert({ tasting_id: tastingId, body }).select().single();
   if(error){ toast("Couldn't post comment — "+error.message); console.error(error); return; }
   (commentsByTasting[tastingId] ||= []).push(data);
   openThreads.add(tastingId);
-  render();
+  rerender();
 }
 
-async function deleteComment(id){
+async function deleteComment(id, rerender=render){
   const tastingId = Object.keys(commentsByTasting).find(tid=>commentsByTasting[tid].some(c=>c.id===id));
   const { error } = await supabase.from("comments").delete().eq("id", id);
   if(error){ toast("Couldn't delete comment — "+error.message); console.error(error); return; }
   if(tastingId){ commentsByTasting[tastingId] = commentsByTasting[tastingId].filter(c=>c.id!==id); }
-  render();
+  rerender();
 }
 
 /* ---- 6. CSV EXPORT --------------------------------------------- */
@@ -959,7 +1013,128 @@ function breakdownSVG(list, field){
   return `<svg viewBox="0 0 ${W} ${H}" class="chart-svg">${rows}</svg>`;
 }
 
-/* ---- 9. WIRE UP & START ---------------------------------------- */
+/* ---- 9. CONNECTIONS ----------------------------------------------
+   Self-service sharing with any number of friends/family via
+   search-by-email + request/accept. Deliberately separate from
+   `partners` (household, also grants cellar access) — connections
+   only ever grant tasting/comment visibility, never cellar. */
+async function loadConnectionsData(){
+  const [{data:conn,error:e1}, {data:reqs,error:e2}] = await Promise.all([
+    supabase.from("connections").select("owner,partner"),
+    supabase.from("connection_requests").select("*")
+  ]);
+  if(e1){ console.error(e1); connections = []; } else { connections = (conn||[]).map(c=>c.partner); }
+  if(e2){ console.error(e2); incomingRequests = []; outgoingRequests = []; return; }
+  incomingRequests = (reqs||[]).filter(r=>r.recipient===currentUserId);
+  outgoingRequests = (reqs||[]).filter(r=>r.requester===currentUserId);
+}
+
+function connectMsg(text, isErr){
+  const el = document.getElementById("connect-msg");
+  el.textContent = text; el.classList.toggle("err", !!isErr);
+}
+
+async function sendConnectionRequest(email){
+  connectMsg("Looking up…", false);
+  const { data, error } = await supabase.rpc("find_user_by_email", { lookup_email: email });
+  if(error){ connectMsg(error.message, true); return; }
+  const found = (data||[])[0];
+  if(!found){ connectMsg("No account found with that email.", true); return; }
+  if(found.id === currentUserId){ connectMsg("That's you!", true); return; }
+  if(connections.includes(found.id)){ connectMsg("You're already connected.", true); return; }
+  // If they already requested you, accept it instead of creating a duplicate pending request.
+  const theirRequest = incomingRequests.find(r=>r.requester===found.id);
+  if(theirRequest){
+    await acceptRequest(theirRequest.id);
+    connectMsg(`You and ${found.email} are now connected.`, false);
+    return;
+  }
+  if(outgoingRequests.some(r=>r.recipient===found.id)){ connectMsg("Request already sent.", true); return; }
+  const { error: insErr } = await supabase.from("connection_requests")
+    .insert({ requester: currentUserId, recipient: found.id });
+  if(insErr){ connectMsg(insErr.message, true); return; }
+  connectMsg(`Request sent to ${found.email}.`, false);
+  await loadConnectionsData();
+  renderConnections();
+}
+
+async function acceptRequest(id){
+  const { error } = await supabase.rpc("accept_connection_request", { req_id: id });
+  if(error){ toast("Couldn't accept — "+error.message); console.error(error); return; }
+  await Promise.all([loadConnectionsData(), loadEntries()]);
+  renderConnections(); renderSharedGroups();
+}
+
+async function removeRequest(id){
+  const { error } = await supabase.from("connection_requests").delete().eq("id", id);
+  if(error){ toast("Couldn't remove request — "+error.message); console.error(error); return; }
+  await loadConnectionsData();
+  renderConnections();
+}
+
+async function removeConnection(otherId){
+  if(!confirm("Remove this connection? They'll lose access to anything you've shared, and you to theirs.")) return;
+  const { error } = await supabase.rpc("remove_connection", { other: otherId });
+  if(error){ toast("Couldn't remove — "+error.message); console.error(error); return; }
+  await Promise.all([loadConnectionsData(), loadEntries()]);
+  renderConnections(); renderSharedGroups();
+}
+
+function renderConnections(){
+  const incomingHTML = incomingRequests.length
+    ? `<div class="conn-block"><p class="conn-heading">Waiting for your approval</p>${incomingRequests.map(r=>`
+        <div class="conn-row"><span>${esc(profiles[r.requester] || r.requester)}</span>
+          <span class="conn-actions">
+            <button class="icon-btn" data-accept-req="${r.id}">Accept</button>
+            <button class="icon-btn" data-decline-req="${r.id}">Decline</button>
+          </span>
+        </div>`).join("")}</div>`
+    : "";
+  const outgoingHTML = outgoingRequests.length
+    ? `<div class="conn-block"><p class="conn-heading">Sent, waiting on them</p>${outgoingRequests.map(r=>`
+        <div class="conn-row"><span>${esc(profiles[r.recipient] || r.recipient)}</span>
+          <span class="conn-actions"><button class="icon-btn" data-cancel-req="${r.id}">Cancel</button></span>
+        </div>`).join("")}</div>`
+    : "";
+  const connHTML = connections.length
+    ? `<div class="conn-block"><p class="conn-heading">Your connections</p>${connections.map(id=>`
+        <div class="conn-row"><span>${esc(profiles[id] || id)}</span>
+          <span class="conn-actions"><button class="icon-btn" data-remove-conn="${id}">Remove</button></span>
+        </div>`).join("")}</div>`
+    : "";
+  const incomingEl = document.getElementById("requests-incoming");
+  const outgoingEl = document.getElementById("requests-outgoing");
+  const connEl = document.getElementById("connections-list");
+  incomingEl.innerHTML = incomingHTML;
+  outgoingEl.innerHTML = outgoingHTML;
+  connEl.innerHTML = connHTML;
+  incomingEl.querySelectorAll("[data-accept-req]").forEach(b=>b.onclick=()=>acceptRequest(b.dataset.acceptReq));
+  incomingEl.querySelectorAll("[data-decline-req]").forEach(b=>b.onclick=()=>removeRequest(b.dataset.declineReq));
+  outgoingEl.querySelectorAll("[data-cancel-req]").forEach(b=>b.onclick=()=>removeRequest(b.dataset.cancelReq));
+  connEl.querySelectorAll("[data-remove-conn]").forEach(b=>b.onclick=()=>removeConnection(b.dataset.removeConn));
+}
+
+function renderSharedGroups(){
+  const sharedIn = entries.filter(e=>e.user_id!==currentUserId);
+  const byPerson = {};
+  sharedIn.forEach(e=>{ (byPerson[e.user_id] ||= []).push(e); });
+  const peopleIds = Object.keys(byPerson);
+  const container = document.getElementById("shared-groups");
+  document.getElementById("shared-empty").classList.toggle("hidden", peopleIds.length>0);
+  document.getElementById("shared-count-label").textContent = peopleIds.length
+    ? `Shared by ${peopleIds.length} connection${peopleIds.length===1?"":"s"}` : "";
+  container.innerHTML = peopleIds.map(uid=>{
+    const list = byPerson[uid].slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+    const name = profiles[uid] || "A connection";
+    return `<div class="shared-group">
+      <h3 class="shared-group-title">${esc(name)}</h3>
+      <div class="cards">${list.map(e=>cardHTML(e,false)).join("")}</div>
+    </div>`;
+  }).join("");
+  wireCardEvents(container, renderSharedGroups);
+}
+
+/* ---- 10. WIRE UP & START ---------------------------------------- */
 ["f-body","f-tannin","f-acidity","f-finish"].forEach(id=>{ document.getElementById(id).innerHTML = gaugeOptions; });
 document.getElementById("new-btn").onclick    = ()=>openForm(null);
 document.getElementById("cancel-btn").onclick = closeForm;
@@ -984,12 +1159,26 @@ document.getElementById("f-photo-remove").onclick = ()=>{
 };
 document.getElementById("cellar-new-btn").onclick    = ()=>openCellarForm(null);
 document.getElementById("cellar-cancel-btn").onclick = closeCellarForm;
+document.getElementById("connect-form").addEventListener("submit", async ev=>{
+  ev.preventDefault();
+  const emailField = document.getElementById("connect-email");
+  const email = emailField.value.trim();
+  if(!email) return;
+  await sendConnectionRequest(email);
+  emailField.value = "";
+});
+document.getElementById("connections-refresh-btn").onclick = async ()=>{
+  await Promise.all([loadConnectionsData(), loadEntries()]);
+  renderConnections(); renderSharedGroups();
+};
 function switchView(view){
   document.querySelectorAll(".view-tab").forEach(b=>b.classList.toggle("active", b.dataset.view===view));
   document.getElementById("view-log").classList.toggle("hidden", view!=="log");
   document.getElementById("view-cellar").classList.toggle("hidden", view!=="cellar");
+  document.getElementById("view-shared").classList.toggle("hidden", view!=="shared");
   document.getElementById("view-stats").classList.toggle("hidden", view!=="stats");
   if(view==="stats") renderStats();
+  if(view==="shared"){ renderConnections(); renderSharedGroups(); }
 }
 document.querySelectorAll(".view-tab").forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 
