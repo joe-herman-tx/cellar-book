@@ -481,3 +481,89 @@ create policy "select cellar shared with me" on public.cellar
         )
     )
   );
+
+-- ============================================================
+--  12. HOUSEHOLD PROMOTION — self-service upgrade of an existing
+--      connection to full household member (adds cellar EDIT
+--      rights via `partners`, on top of the view-only sharing
+--      connections already get). Requires mutual accept, same as
+--      forming a connection in the first place, since granting
+--      someone edit rights on your cellar is a bigger trust jump
+--      than letting them just look. Only ever available between
+--      people who are already connections — see the insert check.
+-- ============================================================
+create table if not exists public.household_requests (
+  id         uuid primary key default gen_random_uuid(),
+  requester  uuid not null references auth.users(id) on delete cascade,
+  recipient  uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (requester, recipient)
+);
+alter table public.household_requests enable row level security;
+
+drop policy if exists "select own household requests" on public.household_requests;
+create policy "select own household requests" on public.household_requests
+  for select using ( requester = auth.uid() or recipient = auth.uid() );
+
+drop policy if exists "send household requests" on public.household_requests;
+create policy "send household requests" on public.household_requests
+  for insert with check (
+    requester = auth.uid()
+    and recipient <> auth.uid()
+    and exists (select 1 from public.connections where owner = auth.uid() and partner = recipient)
+  );
+
+drop policy if exists "remove own household requests" on public.household_requests;
+create policy "remove own household requests" on public.household_requests
+  for delete using ( requester = auth.uid() or recipient = auth.uid() );
+
+create or replace function public.accept_household_request(req_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  req record;
+begin
+  select * into req from public.household_requests where id = req_id;
+  if req is null then
+    raise exception 'Request not found';
+  end if;
+  if req.recipient <> auth.uid() then
+    raise exception 'Not authorized to accept this request';
+  end if;
+  insert into public.partners (owner, partner) values
+    (req.requester, req.recipient),
+    (req.recipient, req.requester)
+  on conflict do nothing;
+  delete from public.household_requests where id = req_id;
+end;
+$$;
+grant execute on function public.accept_household_request(uuid) to authenticated;
+
+create or replace function public.remove_household(other uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.partners
+  where (owner = auth.uid() and partner = other)
+     or (owner = other and partner = auth.uid());
+end;
+$$;
+grant execute on function public.remove_household(uuid) to authenticated;
+
+drop policy if exists "select own or linked profile" on public.profiles;
+create policy "select own or linked profile" on public.profiles
+  for select using (
+    id = auth.uid()
+    or id in (select partner from public.partners where owner = auth.uid())
+    or id in (select partner from public.connections where owner = auth.uid())
+    or id in (select requester from public.connection_requests where recipient = auth.uid())
+    or id in (select recipient from public.connection_requests where requester = auth.uid())
+    or id in (select requester from public.household_requests where recipient = auth.uid())
+    or id in (select recipient from public.household_requests where requester = auth.uid())
+  );

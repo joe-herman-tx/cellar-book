@@ -79,11 +79,12 @@
   .connect-form > div{ flex:1 1 240px; }
   .conn-block{ margin-top:18px; }
   .conn-heading{ font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); font-weight:700; margin:0 0 8px; }
-  .conn-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-top:1px solid var(--line); font-size:14px; }
+  .conn-row{ display:flex; align-items:center; justify-content:space-between; gap:8px 16px; padding:8px 0; border-top:1px solid var(--line); font-size:14px; flex-wrap:wrap; }
   .conn-row:first-of-type{ border-top:none; }
-  .conn-row .conn-actions{ display:flex; align-items:center; gap:12px; flex:0 0 auto; }
+  .conn-row .conn-actions{ display:flex; align-items:center; gap:8px 12px; flex-wrap:wrap; }
   .cellar-share-toggle{ display:flex; align-items:center; gap:5px; font-size:12px; color:var(--ink-soft); text-transform:none; letter-spacing:0; font-weight:500; white-space:nowrap; }
   .cellar-share-toggle input{ width:auto; }
+  .conn-hint{ font-size:12px; color:var(--ink-soft); font-style:italic; white-space:nowrap; }
   .shared-group{ margin-bottom:28px; }
   .shared-group-title{ font-family:"Fraunces",serif; font-weight:600; font-size:18px; margin:0 0 12px; padding-bottom:8px; border-bottom:1px solid var(--line); }
   #connect-msg{ font-size:13px; margin-top:10px; min-height:18px; color:var(--slate); }
@@ -347,7 +348,10 @@
       <p class="msg" id="connect-msg"></p>
 
       <div id="requests-incoming"></div>
+      <div id="requests-household-incoming"></div>
       <div id="requests-outgoing"></div>
+      <div id="requests-household-outgoing"></div>
+      <div id="household-list"></div>
       <div id="connections-list"></div>
     </section>
 
@@ -421,6 +425,8 @@ let connections = [];         // [{id, shareCellar}] — people you're connected
 let incomingRequests = [];    // connection_requests where you're the recipient
 let outgoingRequests = [];    // connection_requests where you're the requester
 let householdIds = [];        // user_ids in `partners` with you (full-edit cellar access)
+let incomingHouseholdRequests = []; // household_requests where you're the recipient
+let outgoingHouseholdRequests = []; // household_requests where you're the requester
 
 /* ---- 1. AUTH --------------------------------------------------- */
 const gate   = document.getElementById("auth-gate");
@@ -445,12 +451,13 @@ function applySession(session){
   if(signedIn){
     currentUserId = session.user.id;
     document.getElementById("user-email").textContent = session.user.email;
-    Promise.all([loadEntries(), loadCellar(), loadConnectionsData(), loadHousehold()])
+    Promise.all([loadEntries(), loadCellar(), loadConnectionsData(), loadHousehold(), loadHouseholdRequests()])
       .then(()=>{ render(); renderCellar(); renderConnections(); });
   }else{
     currentUserId = null;
     entries = []; cellarItems = []; commentsByTasting = {}; openThreads = new Set();
     connections = []; incomingRequests = []; outgoingRequests = []; householdIds = [];
+    incomingHouseholdRequests = []; outgoingHouseholdRequests = [];
   }
 }
 
@@ -1050,6 +1057,44 @@ async function loadConnectionsData(){
   outgoingRequests = (reqs||[]).filter(r=>r.requester===currentUserId);
 }
 
+async function loadHouseholdRequests(){
+  const { data, error } = await supabase.from("household_requests").select("*");
+  if(error){ console.error(error); incomingHouseholdRequests = []; outgoingHouseholdRequests = []; return; }
+  incomingHouseholdRequests = (data||[]).filter(r=>r.recipient===currentUserId);
+  outgoingHouseholdRequests = (data||[]).filter(r=>r.requester===currentUserId);
+}
+
+async function sendHouseholdRequest(otherId){
+  const { error } = await supabase.from("household_requests")
+    .insert({ requester: currentUserId, recipient: otherId });
+  if(error){ toast("Couldn't send — "+error.message); console.error(error); return; }
+  await loadHouseholdRequests();
+  renderConnections();
+  toast("Household request sent");
+}
+
+async function acceptHouseholdRequest(id){
+  const { error } = await supabase.rpc("accept_household_request", { req_id: id });
+  if(error){ toast("Couldn't accept — "+error.message); console.error(error); return; }
+  await Promise.all([loadHouseholdRequests(), loadHousehold(), loadCellar()]);
+  renderConnections(); renderCellar(); renderSharedGroups();
+}
+
+async function removeHouseholdRequest(id){
+  const { error } = await supabase.from("household_requests").delete().eq("id", id);
+  if(error){ toast("Couldn't remove request — "+error.message); console.error(error); return; }
+  await loadHouseholdRequests();
+  renderConnections();
+}
+
+async function removeHousehold(otherId){
+  if(!confirm("Remove this household member? You'll both lose full cellar edit access to each other's cellar.")) return;
+  const { error } = await supabase.rpc("remove_household", { other: otherId });
+  if(error){ toast("Couldn't remove — "+error.message); console.error(error); return; }
+  await Promise.all([loadHousehold(), loadCellar()]);
+  renderConnections(); renderCellar(); renderSharedGroups();
+}
+
 function connectMsg(text, isErr){
   const el = document.getElementById("connect-msg");
   el.textContent = text; el.classList.toggle("err", !!isErr);
@@ -1118,33 +1163,75 @@ function renderConnections(){
           </span>
         </div>`).join("")}</div>`
     : "";
+  const incomingHouseholdHTML = incomingHouseholdRequests.length
+    ? `<div class="conn-block"><p class="conn-heading">Household requests waiting for your approval</p>${incomingHouseholdRequests.map(r=>`
+        <div class="conn-row"><span>${esc(profiles[r.requester] || r.requester)}</span>
+          <span class="conn-actions">
+            <button class="icon-btn" data-accept-household="${r.id}">Accept</button>
+            <button class="icon-btn" data-decline-household="${r.id}">Decline</button>
+          </span>
+        </div>`).join("")}</div>`
+    : "";
   const outgoingHTML = outgoingRequests.length
     ? `<div class="conn-block"><p class="conn-heading">Sent, waiting on them</p>${outgoingRequests.map(r=>`
         <div class="conn-row"><span>${esc(profiles[r.recipient] || r.recipient)}</span>
           <span class="conn-actions"><button class="icon-btn" data-cancel-req="${r.id}">Cancel</button></span>
         </div>`).join("")}</div>`
     : "";
-  const connHTML = connections.length
-    ? `<div class="conn-block"><p class="conn-heading">Your connections</p>${connections.map(c=>`
-        <div class="conn-row"><span>${esc(profiles[c.id] || c.id)}</span>
+  const outgoingHouseholdHTML = outgoingHouseholdRequests.length
+    ? `<div class="conn-block"><p class="conn-heading">Household requests sent, waiting on them</p>${outgoingHouseholdRequests.map(r=>`
+        <div class="conn-row"><span>${esc(profiles[r.recipient] || r.recipient)}</span>
+          <span class="conn-actions"><button class="icon-btn" data-cancel-household="${r.id}">Cancel</button></span>
+        </div>`).join("")}</div>`
+    : "";
+  const householdHTML = householdIds.length
+    ? `<div class="conn-block"><p class="conn-heading">Your household — full cellar edit</p>${householdIds.map(id=>`
+        <div class="conn-row"><span>${esc(profiles[id] || id)}</span>
+          <span class="conn-actions"><button class="icon-btn" data-remove-household="${id}">Remove</button></span>
+        </div>`).join("")}</div>`
+    : "";
+  const nonHouseholdConnections = connections.filter(c=>!householdIds.includes(c.id));
+  const connHTML = nonHouseholdConnections.length
+    ? `<div class="conn-block"><p class="conn-heading">Your connections</p>${nonHouseholdConnections.map(c=>{
+        const pendingOut = outgoingHouseholdRequests.some(r=>r.recipient===c.id);
+        const pendingIn = incomingHouseholdRequests.some(r=>r.requester===c.id);
+        const promoteHTML = pendingOut
+          ? `<span class="conn-hint">Household request sent</span>`
+          : pendingIn
+            ? `<span class="conn-hint">Wants to be household — see above</span>`
+            : `<button class="icon-btn" data-promote-household="${c.id}">Promote to household</button>`;
+        return `<div class="conn-row"><span>${esc(profiles[c.id] || c.id)}</span>
           <span class="conn-actions">
             <label class="cellar-share-toggle">
               <input type="checkbox" data-toggle-cellar="${c.id}" ${c.shareCellar?"checked":""} /> Share my cellar
             </label>
+            ${promoteHTML}
             <button class="icon-btn" data-remove-conn="${c.id}">Remove</button>
           </span>
-        </div>`).join("")}</div>`
+        </div>`;
+      }).join("")}</div>`
     : "";
   const incomingEl = document.getElementById("requests-incoming");
+  const incomingHouseholdEl = document.getElementById("requests-household-incoming");
   const outgoingEl = document.getElementById("requests-outgoing");
+  const outgoingHouseholdEl = document.getElementById("requests-household-outgoing");
+  const householdEl = document.getElementById("household-list");
   const connEl = document.getElementById("connections-list");
   incomingEl.innerHTML = incomingHTML;
+  incomingHouseholdEl.innerHTML = incomingHouseholdHTML;
   outgoingEl.innerHTML = outgoingHTML;
+  outgoingHouseholdEl.innerHTML = outgoingHouseholdHTML;
+  householdEl.innerHTML = householdHTML;
   connEl.innerHTML = connHTML;
   incomingEl.querySelectorAll("[data-accept-req]").forEach(b=>b.onclick=()=>acceptRequest(b.dataset.acceptReq));
   incomingEl.querySelectorAll("[data-decline-req]").forEach(b=>b.onclick=()=>removeRequest(b.dataset.declineReq));
+  incomingHouseholdEl.querySelectorAll("[data-accept-household]").forEach(b=>b.onclick=()=>acceptHouseholdRequest(b.dataset.acceptHousehold));
+  incomingHouseholdEl.querySelectorAll("[data-decline-household]").forEach(b=>b.onclick=()=>removeHouseholdRequest(b.dataset.declineHousehold));
   outgoingEl.querySelectorAll("[data-cancel-req]").forEach(b=>b.onclick=()=>removeRequest(b.dataset.cancelReq));
+  outgoingHouseholdEl.querySelectorAll("[data-cancel-household]").forEach(b=>b.onclick=()=>removeHouseholdRequest(b.dataset.cancelHousehold));
+  householdEl.querySelectorAll("[data-remove-household]").forEach(b=>b.onclick=()=>removeHousehold(b.dataset.removeHousehold));
   connEl.querySelectorAll("[data-remove-conn]").forEach(b=>b.onclick=()=>removeConnection(b.dataset.removeConn));
+  connEl.querySelectorAll("[data-promote-household]").forEach(b=>b.onclick=()=>sendHouseholdRequest(b.dataset.promoteHousehold));
   connEl.querySelectorAll("[data-toggle-cellar]").forEach(cb=>cb.onchange=async ()=>{
     const wanted = cb.checked;
     const ok = await toggleCellarSharing(cb.dataset.toggleCellar, wanted);
@@ -1231,8 +1318,8 @@ document.getElementById("connect-form").addEventListener("submit", async ev=>{
   emailField.value = "";
 });
 document.getElementById("connections-refresh-btn").onclick = async ()=>{
-  await Promise.all([loadConnectionsData(), loadEntries(), loadCellar()]);
-  renderConnections(); renderSharedGroups();
+  await Promise.all([loadConnectionsData(), loadEntries(), loadCellar(), loadHousehold(), loadHouseholdRequests()]);
+  renderConnections(); renderCellar(); renderSharedGroups();
 };
 function switchView(view){
   document.querySelectorAll(".view-tab").forEach(b=>b.classList.toggle("active", b.dataset.view===view));
