@@ -132,14 +132,28 @@
 <div class="gate" id="auth-gate">
   <p class="eyebrow">Personal Cellar Book</p>
   <h1>Sign in</h1>
-  <p>Enter your email and we'll send a one-tap sign-in link. No password. Your log follows you to any device you sign in on.</p>
+  <p id="gate-sub">Enter your email and we'll send a 6-digit code. No password. Your log follows you to any device you sign in on.</p>
+
+  <!-- Step 1: request a code -->
   <form id="login-form">
     <div>
       <label for="email">Email</label>
       <input id="email" type="email" required placeholder="you@example.com" autocomplete="email" />
     </div>
-    <button type="submit" class="btn primary" id="login-btn">Email me a sign-in link</button>
+    <button type="submit" class="btn primary" id="login-btn">Email me a code</button>
   </form>
+
+  <!-- Step 2: enter the code (typed here, in this same app — no context switch) -->
+  <form id="code-form" class="hidden">
+    <div>
+      <label for="code">6-digit code</label>
+      <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+             pattern="[0-9]*" maxlength="6" placeholder="123456" />
+    </div>
+    <button type="submit" class="btn primary" id="verify-btn">Verify &amp; sign in</button>
+    <button type="button" class="signout" id="back-btn">Use a different email</button>
+  </form>
+
   <p class="msg" id="auth-msg"></p>
 </div>
 
@@ -244,10 +258,16 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
    The anon key is DESIGNED to ship in frontend code. It can only do
    what your row-level-security policies allow. NEVER paste the
    "service_role" key here — that one bypasses security. */
-const SUPABASE_URL      = "https://nvtyzotaizrgqdyejxrm.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_f0KUmBToiMhSIAeRdvW9Kw_1ldJdBhC";
+const SUPABASE_URL      = "https://YOUR-PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR-ANON-PUBLIC-KEY";
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,      // keep the session in this device's storage…
+    autoRefreshToken: true,    // …and quietly renew it so you stay signed in
+    detectSessionInUrl: false  // we sign in with a typed code, not a URL redirect
+  }
+});
 const TABLE = "tastings";
 let entries = [];   // in-memory copy of the current user's rows
 
@@ -263,7 +283,7 @@ async function initAuth(){
   }
   const { data:{ session } } = await supabase.auth.getSession();
   applySession(session);
-  // fires on login, logout, and when the magic-link redirect lands
+  // fires on sign-in (after a code is verified) and on sign-out
   supabase.auth.onAuthStateChange((_event, session)=> applySession(session));
 }
 
@@ -284,22 +304,58 @@ function authMsg(text, isErr){
   el.textContent = text; el.classList.toggle("err", !!isErr);
 }
 
-document.getElementById("login-form").addEventListener("submit", async ev=>{
+const loginForm = document.getElementById("login-form");
+const codeForm  = document.getElementById("code-form");
+let pendingEmail = "";   // remembered between the two steps
+
+/* STEP 1 — request a 6-digit code by email */
+loginForm.addEventListener("submit", async ev=>{
   ev.preventDefault();
-  const email = document.getElementById("email").value.trim();
+  pendingEmail = document.getElementById("email").value.trim();
   const btn = document.getElementById("login-btn");
   btn.disabled = true; authMsg("Sending…", false);
-  // magic link: Supabase emails a one-time link that logs this browser in
   const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options:{ emailRedirectTo: window.location.href }
+    email: pendingEmail,
+    options:{ shouldCreateUser: true }   // first-time email? create the account
   });
   btn.disabled = false;
-  authMsg(error ? error.message : "Check your email for the sign-in link.", !!error);
+  if(error){ authMsg(error.message, true); return; }
+  // swap to the code-entry step (same page, same storage context)
+  loginForm.classList.add("hidden");
+  codeForm.classList.remove("hidden");
+  document.getElementById("gate-sub").textContent = `Enter the 6-digit code we emailed to ${pendingEmail}.`;
+  authMsg("Code sent. It may take a moment to arrive.", false);
+  document.getElementById("code").focus();
 });
+
+/* STEP 2 — verify the typed code → this signs you in, right here */
+codeForm.addEventListener("submit", async ev=>{
+  ev.preventDefault();
+  const token = document.getElementById("code").value.trim();
+  const btn = document.getElementById("verify-btn");
+  btn.disabled = true; authMsg("Verifying…", false);
+  const { error } = await supabase.auth.verifyOtp({
+    email: pendingEmail, token, type: "email"
+  });
+  btn.disabled = false;
+  if(error){ authMsg(error.message, true); return; }
+  // success → onAuthStateChange fires and applySession() shows the app
+  authMsg("", false);
+});
+
+/* "Use a different email" → back to step 1 */
+document.getElementById("back-btn").onclick = ()=>{
+  codeForm.classList.add("hidden");
+  loginForm.classList.remove("hidden");
+  document.getElementById("gate-sub").textContent = "Enter your email and we'll send a 6-digit code. No password. Your log follows you to any device you sign in on.";
+  authMsg("", false);
+};
 
 document.getElementById("signout-btn").onclick = async ()=>{
   await supabase.auth.signOut();
+  // reset the gate back to step 1 for the next sign-in
+  codeForm.classList.add("hidden");
+  loginForm.classList.remove("hidden");
 };
 
 /* ---- 2. DATABASE READ/WRITE (replaces localStorage) ------------
