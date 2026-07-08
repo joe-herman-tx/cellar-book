@@ -89,6 +89,11 @@
   .shared-group-title{ font-family:"Fraunces",serif; font-weight:600; font-size:18px; margin:0 0 12px; padding-bottom:8px; border-bottom:1px solid var(--line); }
   #connect-msg{ font-size:13px; margin-top:10px; min-height:18px; color:var(--slate); }
   #connect-msg.err{ color:var(--danger); }
+  .similar-wines{ margin-top:14px; display:flex; flex-direction:column; gap:10px; }
+  .similar-wine{ border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; background:var(--paper-2); }
+  .similar-wine .sw-name{ font-family:"Fraunces",serif; font-weight:600; font-size:15px; }
+  .similar-wine .sw-meta{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .similar-wine .sw-reason{ font-size:13px; margin-top:6px; }
 
   /* ---------- Toolbar ---------- */
   .toolbar{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:20px 0 24px; }
@@ -317,6 +322,8 @@
           <div class="col-2"><label for="c-quantity">Quantity *</label><input id="c-quantity" type="number" min="0" value="1" required /></div>
           <div class="col-3"><label for="c-purchased">Purchased</label><input id="c-purchased" type="date" /></div>
           <div class="col-9"><label for="c-notes">Notes</label><textarea id="c-notes" placeholder="Where you got it, why you bought it, when to drink…"></textarea></div>
+          <div class="col-4"><label for="c-drink-window">Drink window <span style="text-transform:none;font-weight:400;">(estimate)</span></label><input id="c-drink-window" placeholder="2028–2035" /></div>
+          <div class="col-3"><label for="c-decant">Decant time <span style="text-transform:none;font-weight:400;">(estimate)</span></label><input id="c-decant" placeholder="60–90 min" /></div>
           <div class="col-6">
             <label>Label photo</label>
             <div class="photo-field">
@@ -325,6 +332,10 @@
               <button type="button" class="icon-btn photo-remove hidden" id="c-photo-remove">Remove photo</button>
               <button type="button" class="icon-btn hidden" id="c-scan-btn">Scan label</button>
             </div>
+          </div>
+          <div class="col-12">
+            <button type="button" class="btn ghost" id="similar-wines-btn" disabled>Suggest similar wines</button>
+            <div class="similar-wines" id="similar-wines-results"></div>
           </div>
         </div>
         <div class="form-actions">
@@ -909,7 +920,7 @@ function toCellarRow(item){
     id:item.id, vintage:n(item.vintage), name:item.name, producer:n(item.producer),
     region:n(item.region), grape:n(item.grape), price:n(item.price),
     quantity:item.quantity, purchased_date:n(item.purchased_date), notes:n(item.notes),
-    image_path:n(item.image_path)
+    image_path:n(item.image_path), drink_window:n(item.drink_window), decant_time:n(item.decant_time)
   };
 }
 
@@ -919,7 +930,10 @@ function cellarCardHTML(item){
   const addedTag = item.added_by === currentUserId
     ? `<span class="tag shared">Added by you</span>`
     : `<span class="tag shared">Added by ${esc(profiles[item.added_by] || "your partner")}</span>`;
-  const notesDD = item.notes ? `<dl class="notes-block"><dt>Notes</dt><dd>${esc(item.notes)}</dd></dl>` : "";
+  const drinkDD = item.drink_window ? `<dt>Drink</dt><dd>${esc(item.drink_window)}</dd>` : "";
+  const decantDD = item.decant_time ? `<dt>Decant</dt><dd>${esc(item.decant_time)}</dd>` : "";
+  const notesDD = item.notes ? `<dt>Notes</dt><dd>${esc(item.notes)}</dd>` : "";
+  const detailsBlock = (drinkDD||decantDD||notesDD) ? `<dl class="notes-block">${drinkDD}${decantDD}${notesDD}</dl>` : "";
   const thumbHTML = item._imgUrl
     ? `<a href="${esc(item._imgUrl)}" target="_blank" rel="noopener"><img class="card-thumb" src="${esc(item._imgUrl)}" alt="Label for ${esc(item.name)}" /></a>`
     : "";
@@ -928,7 +942,7 @@ function cellarCardHTML(item){
       <div class="vintage-name">${item.vintage?`<span class="vintage">${esc(item.vintage)}</span>`:""}<h3 class="wine-name">${esc(item.name)}</h3></div>
       ${item.producer?`<p class="producer">${esc(item.producer)}</p>`:""}
       <div class="tags">${tags}${purchasedTag}${addedTag}</div>
-      ${notesDD}
+      ${detailsBlock}
       <div class="card-actions">
         <button class="icon-btn" data-cellar-log="${item.id}">Log a tasting</button>
         <button class="icon-btn" data-cellar-edit="${item.id}">Edit</button>
@@ -967,6 +981,9 @@ function openCellarForm(id){
   set("c-vintage",item.vintage); set("c-name",item.name); set("c-producer",item.producer);
   set("c-region",item.region); set("c-grape",item.grape); set("c-price",item.price);
   set("c-quantity", item.quantity ?? 1); set("c-purchased",item.purchased_date); set("c-notes",item.notes);
+  set("c-drink-window",item.drink_window); set("c-decant",item.decant_time);
+  document.getElementById("similar-wines-results").innerHTML = "";
+  updateSimilarWinesButton();
 
   cellarPhotoFile = null; cellarPhotoRemoved = false; cellarExistingImagePath = item.image_path || null;
   document.getElementById("c-photo").value = "";
@@ -990,6 +1007,8 @@ function closeCellarForm(){
   document.getElementById("c-photo-preview").classList.remove("show");
   document.getElementById("c-photo-remove").classList.add("hidden");
   document.getElementById("c-scan-btn").classList.add("hidden");
+  document.getElementById("similar-wines-results").innerHTML = "";
+  updateSimilarWinesButton();
 }
 
 cellarForm.addEventListener("submit", async ev=>{
@@ -1028,6 +1047,8 @@ cellarForm.addEventListener("submit", async ev=>{
     quantity:Number(document.getElementById("c-quantity").value || 1),
     purchased_date:document.getElementById("c-purchased").value,
     notes:document.getElementById("c-notes").value.trim(),
+    drink_window:document.getElementById("c-drink-window").value.trim(),
+    decant_time:document.getElementById("c-decant").value.trim(),
     image_path:imagePath,
   };
   const ok = await upsertCellarItem(rec);
@@ -1318,7 +1339,10 @@ function renderConnections(){
 
 function sharedCellarCardHTML(item){
   const tags = [item.region, item.grape, item.price].filter(Boolean).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
-  const notesDD = item.notes ? `<dl class="notes-block"><dt>Notes</dt><dd>${esc(item.notes)}</dd></dl>` : "";
+  const drinkDD = item.drink_window ? `<dt>Drink</dt><dd>${esc(item.drink_window)}</dd>` : "";
+  const decantDD = item.decant_time ? `<dt>Decant</dt><dd>${esc(item.decant_time)}</dd>` : "";
+  const notesDD = item.notes ? `<dt>Notes</dt><dd>${esc(item.notes)}</dd>` : "";
+  const detailsBlock = (drinkDD||decantDD||notesDD) ? `<dl class="notes-block">${drinkDD}${decantDD}${notesDD}</dl>` : "";
   const thumbHTML = item._imgUrl
     ? `<a href="${esc(item._imgUrl)}" target="_blank" rel="noopener"><img class="card-thumb" src="${esc(item._imgUrl)}" alt="Label for ${esc(item.name)}" /></a>`
     : "";
@@ -1327,7 +1351,7 @@ function sharedCellarCardHTML(item){
       <div class="vintage-name">${item.vintage?`<span class="vintage">${esc(item.vintage)}</span>`:""}<h3 class="wine-name">${esc(item.name)}</h3></div>
       ${item.producer?`<p class="producer">${esc(item.producer)}</p>`:""}
       <div class="tags">${tags}</div>
-      ${notesDD}
+      ${detailsBlock}
     </div>
     <div class="aside">
       ${thumbHTML}
@@ -1417,6 +1441,11 @@ async function scanLabel(file, prefix, btnId){
     set(`${prefix}-producer`, data.producer);
     set(`${prefix}-region`, data.region);
     set(`${prefix}-grape`, data.grape);
+    if(prefix === "c"){
+      set("c-drink-window", data.drink_window);
+      set("c-decant", data.decant_time);
+      updateSimilarWinesButton();
+    }
     toast("Filled in from label");
   }catch(err){
     toast("Couldn't scan — "+err.message);
@@ -1424,6 +1453,46 @@ async function scanLabel(file, prefix, btnId){
   }finally{
     btn.disabled = false; btn.textContent = originalText;
   }
+}
+
+async function suggestSimilarWines(){
+  const btn = document.getElementById("similar-wines-btn");
+  const resultsEl = document.getElementById("similar-wines-results");
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = "Thinking…";
+  try{
+    const body = {
+      name: document.getElementById("c-name").value.trim(),
+      producer: document.getElementById("c-producer").value.trim(),
+      region: document.getElementById("c-region").value.trim(),
+      grape: document.getElementById("c-grape").value.trim(),
+      vintage: document.getElementById("c-vintage").value.trim(),
+    };
+    const { data, error } = await supabase.functions.invoke("suggest-similar-wines", { body });
+    if(error){
+      let msg = error.message;
+      try{ const errBody = await error.context.json(); if(errBody?.error) msg = errBody.error; }catch(_){}
+      toast("Couldn't get suggestions — "+msg);
+      return;
+    }
+    const list = data.suggestions || [];
+    resultsEl.innerHTML = list.map(s=>`
+      <div class="similar-wine">
+        <div class="sw-name">${esc(s.name)}</div>
+        <div class="sw-meta">${esc([s.producer, s.region].filter(Boolean).join(" · "))}</div>
+        <div class="sw-reason">${esc(s.reason)}</div>
+      </div>`).join("");
+  }catch(err){
+    toast("Couldn't get suggestions — "+err.message);
+    console.error(err);
+  }finally{
+    btn.disabled = false; btn.textContent = originalText;
+    updateSimilarWinesButton();
+  }
+}
+
+function updateSimilarWinesButton(){
+  document.getElementById("similar-wines-btn").disabled = !document.getElementById("c-name").value.trim();
 }
 
 /* ---- 11. WIRE UP & START ---------------------------------------- */
@@ -1477,6 +1546,8 @@ document.getElementById("c-photo-remove").onclick = ()=>{
 document.getElementById("c-scan-btn").onclick = ()=>{
   if(cellarPhotoFile) scanLabel(cellarPhotoFile, "c", "c-scan-btn");
 };
+document.getElementById("c-name").oninput = updateSimilarWinesButton;
+document.getElementById("similar-wines-btn").onclick = suggestSimilarWines;
 document.getElementById("connect-form").addEventListener("submit", async ev=>{
   ev.preventDefault();
   const emailField = document.getElementById("connect-email");

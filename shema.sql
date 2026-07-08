@@ -624,3 +624,13 @@ create policy "cellar photos: select own household or shared" on storage.objects
       )
     )
   );
+
+-- ============================================================
+--  14. DRINK WINDOW / DECANT ESTIMATE — free text, not structured
+--      dates/minutes, since these are inherently fuzzy estimates
+--      ("2028-2035", "60-90 min, longer if young") rather than facts.
+--      Filled in by the scan-label function alongside the label's
+--      factual fields, but editable like everything else.
+-- ============================================================
+alter table public.cellar add column if not exists drink_window text;
+alter table public.cellar add column if not exists decant_time text;
