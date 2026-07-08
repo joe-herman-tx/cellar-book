@@ -174,3 +174,99 @@ on conflict (id) do update set email = excluded.email;
 --   ('<your-uuid>',  '<wife-uuid>'),
 --   ('<wife-uuid>',  '<your-uuid>')
 -- on conflict do nothing;
+
+-- ============================================================
+--  7. COMMENTS — anyone who can see a tasting (owner, or shared
+--     + linked partner) can comment on it. Add/delete only, no
+--     editing.
+-- ============================================================
+create table if not exists public.comments (
+  id         uuid primary key default gen_random_uuid(),
+  tasting_id text not null references public.tastings(id) on delete cascade,
+  user_id    uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  body       text not null,
+  created_at timestamptz not null default now()
+);
+alter table public.comments enable row level security;
+
+drop policy if exists "select comments on visible tastings" on public.comments;
+create policy "select comments on visible tastings" on public.comments
+  for select using (
+    exists (
+      select 1 from public.tastings t
+      where t.id = comments.tasting_id
+        and (
+          t.user_id = auth.uid()
+          or (t.shared = true and exists (
+            select 1 from public.partners where owner = auth.uid() and partner = t.user_id
+          ))
+        )
+    )
+  );
+
+drop policy if exists "insert comments on visible tastings" on public.comments;
+create policy "insert comments on visible tastings" on public.comments
+  for insert with check (
+    user_id = auth.uid()
+    and exists (
+      select 1 from public.tastings t
+      where t.id = comments.tasting_id
+        and (
+          t.user_id = auth.uid()
+          or (t.shared = true and exists (
+            select 1 from public.partners where owner = auth.uid() and partner = t.user_id
+          ))
+        )
+    )
+  );
+
+drop policy if exists "delete own comments" on public.comments;
+create policy "delete own comments" on public.comments
+  for delete using ( user_id = auth.uid() );
+
+-- ============================================================
+--  8. CELLAR INVENTORY — bottles you own but haven't tasted yet.
+--     Unlike tastings, this is fully shared: both linked partners
+--     can see AND edit every row, since it's joint property, not
+--     a personal opinion. `added_by` is provenance only.
+-- ============================================================
+create table if not exists public.cellar (
+  id             text primary key,
+  vintage        text,
+  name           text not null,
+  producer       text,
+  region         text,
+  grape          text,
+  price          text,
+  quantity       int not null default 1,
+  purchased_date date,
+  notes          text,
+  added_by       uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  created_at     timestamptz not null default now()
+);
+alter table public.cellar enable row level security;
+
+drop policy if exists "select own or partner cellar" on public.cellar;
+create policy "select own or partner cellar" on public.cellar
+  for select using (
+    added_by = auth.uid()
+    or exists (select 1 from public.partners where owner = auth.uid() and partner = cellar.added_by)
+  );
+
+drop policy if exists "insert own cellar" on public.cellar;
+create policy "insert own cellar" on public.cellar
+  for insert with check ( added_by = auth.uid() );
+
+drop policy if exists "update own or partner cellar" on public.cellar;
+create policy "update own or partner cellar" on public.cellar
+  for update using (
+    added_by = auth.uid()
+    or exists (select 1 from public.partners where owner = auth.uid() and partner = cellar.added_by)
+  );
+
+drop policy if exists "delete own or partner cellar" on public.cellar;
+create policy "delete own or partner cellar" on public.cellar
+  for delete using (
+    added_by = auth.uid()
+    or exists (select 1 from public.partners where owner = auth.uid() and partner = cellar.added_by)
+  );

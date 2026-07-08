@@ -53,6 +53,27 @@
   .masthead .meta{ display:flex; gap:18px; flex-wrap:wrap; align-items:baseline; margin-top:10px; color:var(--ink-soft); font-size:13px; }
   .masthead .meta b{ color:var(--ink); font-family:"Space Mono",monospace; }
 
+  /* ---------- View tabs ---------- */
+  .view-tabs{ display:flex; border-bottom:1px solid var(--line); margin-top:18px; }
+  .view-tab{ background:none; border:none; border-bottom:2px solid transparent; padding:10px 4px; margin-right:20px; font-size:13px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft); cursor:pointer; }
+  .view-tab:hover{ color:var(--ink); }
+  .view-tab.active{ color:var(--oxblood); border-bottom-color:var(--oxblood); }
+
+  /* ---------- Comments ---------- */
+  .comments{ margin-top:10px; }
+  .comment-thread{ margin-top:8px; display:flex; flex-direction:column; gap:10px; padding-top:8px; border-top:1px solid var(--line); }
+  .comment p{ margin:2px 0 0; font-size:13px; }
+  .comment-meta{ display:flex; align-items:center; gap:8px; }
+  .comment-meta b{ font-size:12px; }
+  .comment-meta span{ font-size:11px; color:var(--ink-soft); }
+  .comment-form{ display:flex; gap:8px; align-items:flex-start; }
+  .comment-form textarea{ min-height:38px; }
+  .comment-form .btn{ flex:0 0 auto; }
+
+  /* ---------- Charts ---------- */
+  .chart{ margin-top:6px; }
+  .chart-svg{ width:100%; height:auto; display:block; }
+
   /* ---------- Toolbar ---------- */
   .toolbar{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:20px 0 24px; }
   .toolbar input[type=search]{ flex:1 1 220px; min-width:180px; }
@@ -179,76 +200,135 @@
     </div>
   </header>
 
-  <div class="toolbar">
-    <input type="search" id="search" placeholder="Search name, producer, region, grape, notes…" aria-label="Search tastings" />
-    <div class="sortgroup">
-      <label for="sort" style="margin:0;">Sort</label>
-      <select id="sort" aria-label="Sort entries">
-        <option value="date-desc">Newest first</option>
-        <option value="date-asc">Oldest first</option>
-        <option value="score-desc">Score, high → low</option>
-        <option value="score-asc">Score, low → high</option>
-        <option value="name-asc">Name, A → Z</option>
-      </select>
-    </div>
-    <button class="btn primary" id="new-btn">+ New tasting</button>
-    <button class="btn ghost" id="export-btn">Export CSV</button>
-  </div>
+  <nav class="view-tabs">
+    <button class="view-tab active" data-view="log">Tasting Log</button>
+    <button class="view-tab" data-view="cellar">Cellar</button>
+    <button class="view-tab" data-view="stats">Stats</button>
+  </nav>
 
-  <section class="panel hidden" id="form-panel">
-    <h2 id="form-title">New tasting</h2>
-    <form id="entry-form">
-      <input type="hidden" id="f-id" />
-      <div class="grid">
-        <div class="col-2"><label for="f-vintage">Vintage</label><input id="f-vintage" placeholder="2016" /></div>
-        <div class="col-6"><label for="f-name">Wine *</label><input id="f-name" required placeholder="Duluc de Branaire-Ducru" /></div>
-        <div class="col-4"><label for="f-producer">Producer</label><input id="f-producer" placeholder="Branaire-Ducru" /></div>
-        <div class="col-4"><label for="f-region">Region / appellation</label><input id="f-region" placeholder="Saint-Julien, Bordeaux" /></div>
-        <div class="col-4"><label for="f-grape">Grape / type</label><input id="f-grape" placeholder="Cabernet-dominant blend" /></div>
-        <div class="col-2"><label for="f-price">Price</label><input id="f-price" placeholder="$45" /></div>
-        <div class="col-2"><label for="f-date">Date tasted</label><input id="f-date" type="date" /></div>
-        <div class="col-6"><label for="f-nose">Nose</label><textarea id="f-nose" placeholder="Cherry, plum, violet…"></textarea></div>
-        <div class="col-6"><label for="f-palate">Palate</label><textarea id="f-palate" placeholder="Firm tannins, dry finish, earthy / cedar oak…"></textarea></div>
-        <div class="col-12">
-          <label>Structure (1 = low · 5 = high)</label>
-          <div class="gauge-row">
-            <div class="gauge-field"><label for="f-body" style="font-size:10px;">Body</label><select id="f-body"></select></div>
-            <div class="gauge-field"><label for="f-tannin" style="font-size:10px;">Tannin</label><select id="f-tannin"></select></div>
-            <div class="gauge-field"><label for="f-acidity" style="font-size:10px;">Acidity</label><select id="f-acidity"></select></div>
-            <div class="gauge-field"><label for="f-finish" style="font-size:10px;">Finish</label><select id="f-finish"></select></div>
-          </div>
-        </div>
-        <div class="col-9"><label for="f-notes">Overall notes</label><textarea id="f-notes" placeholder="Verdict, food pairing, whether to buy again…"></textarea></div>
-        <div class="col-3"><label for="f-score">Score / 100</label><input id="f-score" type="number" min="0" max="100" placeholder="—" /></div>
-        <div class="col-6">
-          <label>Label photo</label>
-          <div class="photo-field">
-            <img id="f-photo-preview" class="photo-preview" alt="Label preview" />
-            <input type="file" id="f-photo" accept="image/*" />
-            <button type="button" class="icon-btn photo-remove hidden" id="f-photo-remove">Remove photo</button>
-          </div>
-        </div>
-        <div class="col-6">
-          <label>Sharing</label>
-          <div class="check-row">
-            <input type="checkbox" id="f-shared" />
-            <label for="f-shared">Share with my wife (read-only for her)</label>
-          </div>
-        </div>
+  <section id="view-log">
+    <div class="toolbar">
+      <input type="search" id="search" placeholder="Search name, producer, region, grape, notes…" aria-label="Search tastings" />
+      <div class="sortgroup">
+        <label for="sort" style="margin:0;">Sort</label>
+        <select id="sort" aria-label="Sort entries">
+          <option value="date-desc">Newest first</option>
+          <option value="date-asc">Oldest first</option>
+          <option value="score-desc">Score, high → low</option>
+          <option value="score-asc">Score, low → high</option>
+          <option value="name-asc">Name, A → Z</option>
+        </select>
       </div>
-      <div class="form-actions">
-        <button type="submit" class="btn primary" id="save-btn">Save tasting</button>
-        <button type="button" class="btn ghost" id="cancel-btn">Cancel</button>
-      </div>
-    </form>
+      <button class="btn primary" id="new-btn">+ New tasting</button>
+      <button class="btn ghost" id="export-btn">Export CSV</button>
+    </div>
+
+    <section class="panel hidden" id="form-panel">
+      <h2 id="form-title">New tasting</h2>
+      <form id="entry-form">
+        <input type="hidden" id="f-id" />
+        <div class="grid">
+          <div class="col-2"><label for="f-vintage">Vintage</label><input id="f-vintage" placeholder="2016" /></div>
+          <div class="col-6"><label for="f-name">Wine *</label><input id="f-name" required placeholder="Duluc de Branaire-Ducru" /></div>
+          <div class="col-4"><label for="f-producer">Producer</label><input id="f-producer" placeholder="Branaire-Ducru" /></div>
+          <div class="col-4"><label for="f-region">Region / appellation</label><input id="f-region" placeholder="Saint-Julien, Bordeaux" /></div>
+          <div class="col-4"><label for="f-grape">Grape / type</label><input id="f-grape" placeholder="Cabernet-dominant blend" /></div>
+          <div class="col-2"><label for="f-price">Price</label><input id="f-price" placeholder="$45" /></div>
+          <div class="col-2"><label for="f-date">Date tasted</label><input id="f-date" type="date" /></div>
+          <div class="col-6"><label for="f-nose">Nose</label><textarea id="f-nose" placeholder="Cherry, plum, violet…"></textarea></div>
+          <div class="col-6"><label for="f-palate">Palate</label><textarea id="f-palate" placeholder="Firm tannins, dry finish, earthy / cedar oak…"></textarea></div>
+          <div class="col-12">
+            <label>Structure (1 = low · 5 = high)</label>
+            <div class="gauge-row">
+              <div class="gauge-field"><label for="f-body" style="font-size:10px;">Body</label><select id="f-body"></select></div>
+              <div class="gauge-field"><label for="f-tannin" style="font-size:10px;">Tannin</label><select id="f-tannin"></select></div>
+              <div class="gauge-field"><label for="f-acidity" style="font-size:10px;">Acidity</label><select id="f-acidity"></select></div>
+              <div class="gauge-field"><label for="f-finish" style="font-size:10px;">Finish</label><select id="f-finish"></select></div>
+            </div>
+          </div>
+          <div class="col-9"><label for="f-notes">Overall notes</label><textarea id="f-notes" placeholder="Verdict, food pairing, whether to buy again…"></textarea></div>
+          <div class="col-3"><label for="f-score">Score / 100</label><input id="f-score" type="number" min="0" max="100" placeholder="—" /></div>
+          <div class="col-6">
+            <label>Label photo</label>
+            <div class="photo-field">
+              <img id="f-photo-preview" class="photo-preview" alt="Label preview" />
+              <input type="file" id="f-photo" accept="image/*" />
+              <button type="button" class="icon-btn photo-remove hidden" id="f-photo-remove">Remove photo</button>
+            </div>
+          </div>
+          <div class="col-6">
+            <label>Sharing</label>
+            <div class="check-row">
+              <input type="checkbox" id="f-shared" />
+              <label for="f-shared">Share with my wife (read-only for her)</label>
+            </div>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn primary" id="save-btn">Save tasting</button>
+          <button type="button" class="btn ghost" id="cancel-btn">Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <p class="count" id="count-label"></p>
+    <div class="cards" id="cards"></div>
+    <div class="empty hidden" id="empty">
+      <h3>No tastings yet</h3>
+      <p>Pour something and hit <b>+ New tasting</b> to start the book.</p>
+    </div>
   </section>
 
-  <p class="count" id="count-label"></p>
-  <div class="cards" id="cards"></div>
-  <div class="empty hidden" id="empty">
-    <h3>No tastings yet</h3>
-    <p>Pour something and hit <b>+ New tasting</b> to start the book.</p>
-  </div>
+  <section id="view-cellar" class="hidden">
+    <div class="toolbar">
+      <div style="flex:1 1 auto;"></div>
+      <button class="btn primary" id="cellar-new-btn">+ Add bottle</button>
+    </div>
+
+    <section class="panel hidden" id="cellar-form-panel">
+      <h2 id="cellar-form-title">Add bottle</h2>
+      <form id="cellar-form">
+        <input type="hidden" id="c-id" />
+        <div class="grid">
+          <div class="col-2"><label for="c-vintage">Vintage</label><input id="c-vintage" placeholder="2016" /></div>
+          <div class="col-6"><label for="c-name">Wine *</label><input id="c-name" required placeholder="Duluc de Branaire-Ducru" /></div>
+          <div class="col-4"><label for="c-producer">Producer</label><input id="c-producer" placeholder="Branaire-Ducru" /></div>
+          <div class="col-4"><label for="c-region">Region / appellation</label><input id="c-region" placeholder="Saint-Julien, Bordeaux" /></div>
+          <div class="col-4"><label for="c-grape">Grape / type</label><input id="c-grape" placeholder="Cabernet-dominant blend" /></div>
+          <div class="col-2"><label for="c-price">Price</label><input id="c-price" placeholder="$45" /></div>
+          <div class="col-2"><label for="c-quantity">Quantity *</label><input id="c-quantity" type="number" min="0" value="1" required /></div>
+          <div class="col-3"><label for="c-purchased">Purchased</label><input id="c-purchased" type="date" /></div>
+          <div class="col-9"><label for="c-notes">Notes</label><textarea id="c-notes" placeholder="Where you got it, why you bought it, when to drink…"></textarea></div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn primary" id="cellar-save-btn">Save bottle</button>
+          <button type="button" class="btn ghost" id="cellar-cancel-btn">Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <p class="count" id="cellar-count-label"></p>
+    <div class="cards" id="cellar-cards"></div>
+    <div class="empty hidden" id="cellar-empty">
+      <h3>Cellar's empty</h3>
+      <p>Add a bottle you've bought but haven't opened yet.</p>
+    </div>
+  </section>
+
+  <section id="view-stats" class="hidden">
+    <section class="panel">
+      <h2>Score over time</h2>
+      <div class="chart" id="chart-trend"></div>
+    </section>
+    <section class="panel">
+      <h2>Top regions</h2>
+      <div class="chart" id="chart-region"></div>
+    </section>
+    <section class="panel">
+      <h2>Top grapes</h2>
+      <div class="chart" id="chart-grape"></div>
+    </section>
+  </section>
 
   <footer class="foot">
     <span>Saved to your account · syncs to every device you sign in on.</span>
@@ -282,13 +362,17 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   }
 });
 const TABLE = "tastings";
+const CELLAR_TABLE = "cellar";
 const PHOTOS_BUCKET = "wine-labels";
 let entries = [];   // in-memory copy of rows you own + rows shared with you
+let cellarItems = []; // in-memory copy of the shared cellar inventory
 let currentUserId = null;
 let profiles = {};  // { user_id: email } for yourself + linked partner
 let photoFile = null;         // newly-picked File awaiting upload, if any
 let photoRemoved = false;     // true if "Remove photo" was clicked on an existing entry
 let existingImagePath = null; // image_path already on the entry being edited
+let commentsByTasting = {};   // { tasting_id: [comment, ...] }
+let openThreads = new Set();  // tasting ids whose comment thread is expanded
 
 /* ---- 1. AUTH --------------------------------------------------- */
 const gate   = document.getElementById("auth-gate");
@@ -313,10 +397,10 @@ function applySession(session){
   if(signedIn){
     currentUserId = session.user.id;
     document.getElementById("user-email").textContent = session.user.email;
-    loadEntries().then(render);
+    Promise.all([loadEntries(), loadCellar()]).then(()=>{ render(); renderCellar(); });
   }else{
     currentUserId = null;
-    entries = [];
+    entries = []; cellarItems = []; commentsByTasting = {}; openThreads = new Set();
   }
 }
 
@@ -383,7 +467,16 @@ async function loadEntries(){
   const { data, error } = await supabase.from(TABLE).select("*");
   if(error){ toast("Couldn't load — "+error.message); console.error(error); entries=[]; return; }
   entries = data || [];
-  await Promise.all([loadProfiles(), resolveImages()]);
+  await Promise.all([loadProfiles(), resolveImages(), loadComments()]);
+}
+
+async function loadComments(){
+  const ids = entries.map(e=>e.id);
+  commentsByTasting = {};
+  if(!ids.length) return;
+  const { data, error } = await supabase.from("comments").select("*").in("tasting_id", ids).order("created_at");
+  if(error){ console.error(error); return; }
+  (data||[]).forEach(c=>{ (commentsByTasting[c.tasting_id] ||= []).push(c); });
 }
 
 async function loadProfiles(){
@@ -480,9 +573,33 @@ function cardHTML(e){
       <div class="tags">${tags}${dateTag}${sharedTag}</div>
       <dl class="notes-block">${noseDD}${palateDD}${notesDD}</dl>
       ${actionsHTML}
+      ${commentsHTML(e)}
     </div>
     <div class="aside">${thumbHTML}${scoreHTML}${structureStrip(e)}</div>
   </article>`;
+}
+function commentsHTML(e){
+  const list = commentsByTasting[e.id] || [];
+  const open = openThreads.has(e.id);
+  const items = list.map(c=>{
+    const mineComment = c.user_id === currentUserId;
+    const author = mineComment ? "You" : (profiles[c.user_id] || "your partner");
+    const when = c.created_at ? new Date(c.created_at).toLocaleDateString() : "";
+    return `<div class="comment">
+      <div class="comment-meta"><b>${esc(author)}</b><span>${esc(when)}</span>${mineComment?`<button class="icon-btn" data-del-comment="${c.id}">Delete</button>`:""}</div>
+      <p>${esc(c.body)}</p>
+    </div>`;
+  }).join("");
+  return `<div class="comments">
+    <button class="icon-btn" data-toggle-comments="${e.id}">${open?"Hide comments":"Comments"} (${list.length})</button>
+    <div class="comment-thread ${open?"":"hidden"}">
+      ${items}
+      <form class="comment-form" data-comment-for="${e.id}">
+        <textarea placeholder="Add a comment…" required></textarea>
+        <button type="submit" class="btn ghost">Post</button>
+      </form>
+    </div>
+  </div>`;
 }
 function currentView(){
   const q = document.getElementById("search").value.trim().toLowerCase();
@@ -510,6 +627,19 @@ function render(){
   document.getElementById("count-label").textContent = entries.length ? `Showing ${list.length} of ${entries.length}` : "";
   cards.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openForm(b.dataset.edit));
   cards.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>del(b.dataset.del));
+  cards.querySelectorAll("[data-toggle-comments]").forEach(b=>b.onclick=()=>{
+    const id = b.dataset.toggleComments;
+    openThreads.has(id) ? openThreads.delete(id) : openThreads.add(id);
+    render();
+  });
+  cards.querySelectorAll("[data-del-comment]").forEach(b=>b.onclick=()=>deleteComment(b.dataset.delComment));
+  cards.querySelectorAll(".comment-form").forEach(f=>f.onsubmit=async ev=>{
+    ev.preventDefault();
+    const textarea = f.querySelector("textarea");
+    const body = textarea.value.trim();
+    if(!body) return;
+    await postComment(f.dataset.commentFor, body);
+  });
   // Stats reflect only tastings you logged yourself, not ones shared to you.
   const mine = entries.filter(e=>e.user_id===currentUserId);
   const scored = mine.filter(e=>e.score!==null && e.score!=="");
@@ -522,10 +652,10 @@ function render(){
 /* ---- 5. FORM: open / save / cancel ----------------------------- */
 const panel = document.getElementById("form-panel");
 const form  = document.getElementById("entry-form");
-function openForm(id){
+function openForm(id, prefill){
   panel.classList.remove("hidden");
   document.getElementById("form-title").textContent = id ? "Edit tasting" : "New tasting";
-  const e = id ? entries.find(x=>x.id===id) : {};
+  const e = id ? entries.find(x=>x.id===id) : (prefill || {});
   const set = (f,v)=> document.getElementById(f).value = (v===null||v===undefined)?"":v;
   document.getElementById("f-id").value = id || "";
   set("f-vintage",e.vintage); set("f-name",e.name); set("f-producer",e.producer);
@@ -620,6 +750,23 @@ async function del(id){
   render(); toast("Tasting deleted");
 }
 
+async function postComment(tastingId, body){
+  const { data, error } = await supabase.from("comments")
+    .insert({ tasting_id: tastingId, body }).select().single();
+  if(error){ toast("Couldn't post comment — "+error.message); console.error(error); return; }
+  (commentsByTasting[tastingId] ||= []).push(data);
+  openThreads.add(tastingId);
+  render();
+}
+
+async function deleteComment(id){
+  const tastingId = Object.keys(commentsByTasting).find(tid=>commentsByTasting[tid].some(c=>c.id===id));
+  const { error } = await supabase.from("comments").delete().eq("id", id);
+  if(error){ toast("Couldn't delete comment — "+error.message); console.error(error); return; }
+  if(tastingId){ commentsByTasting[tastingId] = commentsByTasting[tastingId].filter(c=>c.id!==id); }
+  render();
+}
+
 /* ---- 6. CSV EXPORT --------------------------------------------- */
 function exportCSV(){
   if(!entries.length){ toast("Nothing to export yet"); return; }
@@ -632,7 +779,185 @@ function exportCSV(){
   URL.revokeObjectURL(url); toast("CSV exported");
 }
 
-/* ---- 7. WIRE UP & START ---------------------------------------- */
+/* ---- 7. CELLAR INVENTORY ----------------------------------------
+   Bottles you own but haven't tasted yet. Unlike tastings, this is
+   fully shared — both linked partners can see AND edit every row. */
+async function loadCellar(){
+  const { data, error } = await supabase.from(CELLAR_TABLE).select("*");
+  if(error){ toast("Couldn't load cellar — "+error.message); console.error(error); cellarItems=[]; return; }
+  cellarItems = data || [];
+}
+
+async function upsertCellarItem(rec){
+  const { error } = await supabase.from(CELLAR_TABLE).upsert(toCellarRow(rec));
+  if(error){ toast("Couldn't save — "+error.message); console.error(error); return false; }
+  return true;
+}
+
+async function deleteCellarItem(id){
+  const { error } = await supabase.from(CELLAR_TABLE).delete().eq("id", id);
+  if(error){ toast("Couldn't delete — "+error.message); console.error(error); return false; }
+  return true;
+}
+
+function toCellarRow(item){
+  const n = v => (v===""||v===undefined||v===null) ? null : v;
+  return {
+    id:item.id, vintage:n(item.vintage), name:item.name, producer:n(item.producer),
+    region:n(item.region), grape:n(item.grape), price:n(item.price),
+    quantity:item.quantity, purchased_date:n(item.purchased_date), notes:n(item.notes)
+  };
+}
+
+function cellarCardHTML(item){
+  const tags = [item.region, item.grape, item.price].filter(Boolean).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+  const purchasedTag = item.purchased_date ? `<span class="tag date">${esc(item.purchased_date)}</span>` : "";
+  const addedTag = item.added_by === currentUserId
+    ? `<span class="tag shared">Added by you</span>`
+    : `<span class="tag shared">Added by ${esc(profiles[item.added_by] || "your partner")}</span>`;
+  const notesDD = item.notes ? `<dl class="notes-block"><dt>Notes</dt><dd>${esc(item.notes)}</dd></dl>` : "";
+  return `<article class="card">
+    <div class="body">
+      <div class="vintage-name">${item.vintage?`<span class="vintage">${esc(item.vintage)}</span>`:""}<h3 class="wine-name">${esc(item.name)}</h3></div>
+      ${item.producer?`<p class="producer">${esc(item.producer)}</p>`:""}
+      <div class="tags">${tags}${purchasedTag}${addedTag}</div>
+      ${notesDD}
+      <div class="card-actions">
+        <button class="icon-btn" data-cellar-log="${item.id}">Log a tasting</button>
+        <button class="icon-btn" data-cellar-edit="${item.id}">Edit</button>
+        <button class="icon-btn" data-cellar-del="${item.id}">Delete</button>
+      </div>
+    </div>
+    <div class="aside">
+      <div class="score">${esc(String(item.quantity))}<small>in cellar</small></div>
+    </div>
+  </article>`;
+}
+
+function renderCellar(){
+  const cards = document.getElementById("cellar-cards");
+  const list = cellarItems.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+  cards.innerHTML = list.map(cellarCardHTML).join("");
+  document.getElementById("cellar-empty").classList.toggle("hidden", cellarItems.length>0);
+  document.getElementById("cellar-count-label").textContent = cellarItems.length ? `${cellarItems.length} in the rack` : "";
+  cards.querySelectorAll("[data-cellar-edit]").forEach(b=>b.onclick=()=>openCellarForm(b.dataset.cellarEdit));
+  cards.querySelectorAll("[data-cellar-del]").forEach(b=>b.onclick=()=>delCellar(b.dataset.cellarDel));
+  cards.querySelectorAll("[data-cellar-log]").forEach(b=>b.onclick=()=>logTasting(b.dataset.cellarLog));
+}
+
+const cellarPanel = document.getElementById("cellar-form-panel");
+const cellarForm  = document.getElementById("cellar-form");
+function openCellarForm(id){
+  cellarPanel.classList.remove("hidden");
+  document.getElementById("cellar-form-title").textContent = id ? "Edit bottle" : "Add bottle";
+  const item = id ? cellarItems.find(x=>x.id===id) : {};
+  const set = (f,v)=> document.getElementById(f).value = (v===null||v===undefined)?"":v;
+  document.getElementById("c-id").value = id || "";
+  set("c-vintage",item.vintage); set("c-name",item.name); set("c-producer",item.producer);
+  set("c-region",item.region); set("c-grape",item.grape); set("c-price",item.price);
+  set("c-quantity", item.quantity ?? 1); set("c-purchased",item.purchased_date); set("c-notes",item.notes);
+  cellarPanel.scrollIntoView({behavior:"smooth", block:"start"});
+  document.getElementById("c-name").focus();
+}
+function closeCellarForm(){ cellarPanel.classList.add("hidden"); cellarForm.reset(); }
+
+cellarForm.addEventListener("submit", async ev=>{
+  ev.preventDefault();
+  const idField = document.getElementById("c-id").value;
+  const rec = {
+    id: idField || uid(),
+    vintage:document.getElementById("c-vintage").value.trim(),
+    name:document.getElementById("c-name").value.trim(),
+    producer:document.getElementById("c-producer").value.trim(),
+    region:document.getElementById("c-region").value.trim(),
+    grape:document.getElementById("c-grape").value.trim(),
+    price:document.getElementById("c-price").value.trim(),
+    quantity:Number(document.getElementById("c-quantity").value || 1),
+    purchased_date:document.getElementById("c-purchased").value,
+    notes:document.getElementById("c-notes").value.trim(),
+  };
+  const saveBtn = document.getElementById("cellar-save-btn");
+  saveBtn.disabled = true;
+  const ok = await upsertCellarItem(rec);
+  saveBtn.disabled = false;
+  if(!ok) return;
+  if(idField){ cellarItems = cellarItems.map(x=>x.id===idField ? {...x, ...rec} : x); }
+  else { cellarItems.unshift({...rec, added_by:currentUserId}); }
+  closeCellarForm(); renderCellar();
+  toast(idField ? "Bottle updated" : "Bottle added");
+});
+
+async function delCellar(id){
+  const item = cellarItems.find(x=>x.id===id);
+  if(!confirm(`Remove "${item?.name||"this bottle"}" from the cellar?`)) return;
+  const ok = await deleteCellarItem(id);
+  if(!ok) return;
+  cellarItems = cellarItems.filter(x=>x.id!==id);
+  renderCellar(); toast("Removed from cellar");
+}
+
+async function logTasting(id){
+  const item = cellarItems.find(x=>x.id===id);
+  if(!item) return;
+  const newQty = (item.quantity||1) - 1;
+  if(newQty <= 0){
+    const ok = await deleteCellarItem(id);
+    if(!ok) return;
+    cellarItems = cellarItems.filter(x=>x.id!==id);
+  }else{
+    const ok = await upsertCellarItem({...item, quantity:newQty});
+    if(!ok) return;
+    cellarItems = cellarItems.map(x=>x.id===id ? {...x, quantity:newQty} : x);
+  }
+  renderCellar();
+  switchView("log");
+  openForm(null, { vintage:item.vintage, name:item.name, producer:item.producer, region:item.region, grape:item.grape, price:item.price });
+}
+
+/* ---- 8. STATS DASHBOARD ------------------------------------------
+   Your own tastings only, consistent with the header stats. Hand-
+   rolled inline SVG — no chart library, no new dependency. */
+function renderStats(){
+  const mine = entries.filter(e=>e.user_id===currentUserId);
+  document.getElementById("chart-trend").innerHTML = scoreTrendSVG(mine);
+  document.getElementById("chart-region").innerHTML = breakdownSVG(mine, "region");
+  document.getElementById("chart-grape").innerHTML = breakdownSVG(mine, "grape");
+}
+
+function scoreTrendSVG(list){
+  const scored = list.filter(e=>e.score!==null && e.score!=="" && e.date)
+    .slice().sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+  if(!scored.length) return `<p class="producer">Log a few scored tastings to see a trend.</p>`;
+  const W=640, H=200, PAD=28;
+  const xStep = scored.length>1 ? (W-PAD*2)/(scored.length-1) : 0;
+  const yFor = s => H-PAD - (Number(s)/100)*(H-PAD*2);
+  const pts = scored.map((e,i)=>`${PAD+i*xStep},${yFor(e.score)}`).join(" ");
+  const dots = scored.map((e,i)=>`<circle cx="${PAD+i*xStep}" cy="${yFor(e.score)}" r="3.5" fill="var(--oxblood)"><title>${esc(e.name)} — ${esc(String(e.score))}</title></circle>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart-svg">
+    <line x1="${PAD}" y1="${H-PAD}" x2="${W-PAD}" y2="${H-PAD}" stroke="var(--line)" />
+    <polyline points="${pts}" fill="none" stroke="var(--oxblood)" stroke-width="2" />
+    ${dots}
+  </svg>`;
+}
+
+function breakdownSVG(list, field){
+  const counts = {};
+  list.forEach(e=>{ const v=(e[field]||"").trim(); if(v) counts[v]=(counts[v]||0)+1; });
+  const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  if(!top.length) return `<p class="producer">No ${esc(field)} data yet.</p>`;
+  const max = top[0][1];
+  const rowH = 28, W = 640, H = top.length*rowH + 10, barMaxW = W-160;
+  const rows = top.map(([label,count],i)=>{
+    const y = i*rowH;
+    const w = Math.max(4, (count/max)*barMaxW);
+    return `<text x="0" y="${y+16}" font-size="12" fill="var(--ink)">${esc(label)}</text>
+      <rect x="150" y="${y+4}" width="${w}" height="16" fill="var(--brass)" rx="2" />
+      <text x="${150+w+8}" y="${y+16}" font-size="12" fill="var(--ink-soft)">${count}</text>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart-svg">${rows}</svg>`;
+}
+
+/* ---- 9. WIRE UP & START ---------------------------------------- */
 ["f-body","f-tannin","f-acidity","f-finish"].forEach(id=>{ document.getElementById(id).innerHTML = gaugeOptions; });
 document.getElementById("new-btn").onclick    = ()=>openForm(null);
 document.getElementById("cancel-btn").onclick = closeForm;
@@ -655,6 +980,16 @@ document.getElementById("f-photo-remove").onclick = ()=>{
   preview.src = ""; preview.classList.remove("show");
   document.getElementById("f-photo-remove").classList.add("hidden");
 };
+document.getElementById("cellar-new-btn").onclick    = ()=>openCellarForm(null);
+document.getElementById("cellar-cancel-btn").onclick = closeCellarForm;
+function switchView(view){
+  document.querySelectorAll(".view-tab").forEach(b=>b.classList.toggle("active", b.dataset.view===view));
+  document.getElementById("view-log").classList.toggle("hidden", view!=="log");
+  document.getElementById("view-cellar").classList.toggle("hidden", view!=="cellar");
+  document.getElementById("view-stats").classList.toggle("hidden", view!=="stats");
+  if(view==="stats") renderStats();
+}
+document.querySelectorAll(".view-tab").forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 
 initAuth();
 </script>
