@@ -37,14 +37,140 @@ create table if not exists public.tastings (
 alter table public.tastings enable row level security;
 
 -- 3. POLICIES: you can only see and change rows you own ------
+drop policy if exists "select own" on public.tastings;
 create policy "select own" on public.tastings
   for select using ( auth.uid() = user_id );
 
+drop policy if exists "insert own" on public.tastings;
 create policy "insert own" on public.tastings
   for insert with check ( auth.uid() = user_id );
 
+drop policy if exists "update own" on public.tastings;
 create policy "update own" on public.tastings
   for update using ( auth.uid() = user_id );
 
+drop policy if exists "delete own" on public.tastings;
 create policy "delete own" on public.tastings
   for delete using ( auth.uid() = user_id );
+
+-- ============================================================
+--  4. SHARING — read-only sharing of individual tastings.
+--     A tasting is private until you flip `shared` on. Nothing
+--     is visible to anyone else unless they're in `partners`
+--     AND the row is explicitly marked shared.
+-- ============================================================
+alter table public.tastings add column if not exists shared boolean not null default false;
+alter table public.tastings add column if not exists image_path text;
+
+-- Allowlist: "owner has agreed to share their shared-flagged rows with partner".
+-- Insert both directions once your wife has signed up (see bottom of this file).
+create table if not exists public.partners (
+  owner   uuid not null references auth.users(id) on delete cascade,
+  partner uuid not null references auth.users(id) on delete cascade,
+  primary key (owner, partner)
+);
+alter table public.partners enable row level security;
+
+drop policy if exists "select own links" on public.partners;
+create policy "select own links" on public.partners
+  for select using ( auth.uid() = owner );
+
+-- Additive to "select own" above — Postgres OR's multiple permissive
+-- SELECT policies together, so this only ever ADDS visibility.
+drop policy if exists "select shared with me" on public.tastings;
+create policy "select shared with me" on public.tastings
+  for select using (
+    shared = true
+    and exists (select 1 from public.partners where owner = auth.uid() and partner = tastings.user_id)
+  );
+-- insert/update/delete stay owner-only (unchanged above) — sharing is read-only.
+
+-- ============================================================
+--  5. STORAGE — bucket for label photos.
+--     Private bucket; access follows the exact same shared-flag
+--     rule as the row itself, not a guessable URL.
+--     Object path convention: {user_id}/{tasting_id}
+-- ============================================================
+insert into storage.buckets (id, name, public)
+values ('wine-labels', 'wine-labels', false)
+on conflict (id) do nothing;
+
+drop policy if exists "labels: own folder write" on storage.objects;
+create policy "labels: own folder write" on storage.objects
+  for insert with check (
+    bucket_id = 'wine-labels' and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "labels: own folder update" on storage.objects;
+create policy "labels: own folder update" on storage.objects
+  for update using (
+    bucket_id = 'wine-labels' and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "labels: own folder delete" on storage.objects;
+create policy "labels: own folder delete" on storage.objects
+  for delete using (
+    bucket_id = 'wine-labels' and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "labels: select own or shared" on storage.objects;
+create policy "labels: select own or shared" on storage.objects
+  for select using (
+    bucket_id = 'wine-labels' and (
+      (storage.foldername(name))[1] = auth.uid()::text
+      or exists (
+        select 1 from public.tastings t
+        join public.partners p on p.owner = auth.uid() and p.partner = t.user_id
+        where t.shared = true
+          and t.user_id::text = (storage.foldername(name))[1]
+          and t.id = split_part(name, '/', 2)
+      )
+    )
+  );
+
+-- ============================================================
+--  6. PROFILES — lets a shared card say "Shared by Ana" instead
+--     of a raw UUID. Auto-populated on every future sign-up.
+-- ============================================================
+create table if not exists public.profiles (
+  id    uuid primary key references auth.users(id) on delete cascade,
+  email text
+);
+alter table public.profiles enable row level security;
+
+drop policy if exists "select own or linked profile" on public.profiles;
+create policy "select own or linked profile" on public.profiles
+  for select using (
+    id = auth.uid()
+    or id in (select partner from public.partners where owner = auth.uid())
+  );
+
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (id, email) values (new.id, new.email)
+  on conflict (id) do update set email = excluded.email;
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- Backfill profiles for any account(s) that already existed before this
+-- trigger was created (e.g. your own account).
+insert into public.profiles (id, email)
+select id, email from auth.users
+on conflict (id) do update set email = excluded.email;
+
+-- ============================================================
+--  ONE-TIME MANUAL STEP — after your wife creates her account via
+--  the app's own "Create an account" form, link you two together.
+--  Find both UUIDs in Supabase Dashboard → Authentication → Users.
+-- ============================================================
+-- insert into public.partners (owner, partner) values
+--   ('<your-uuid>',  '<wife-uuid>'),
+--   ('<wife-uuid>',  '<your-uuid>')
+-- on conflict do nothing;

@@ -80,6 +80,13 @@
   .col-6{ grid-column:span 6; } .col-9{ grid-column:span 9; } .col-12{ grid-column:span 12; }
   @media (max-width:640px){ [class^=col-]{ grid-column:span 12 !important; } }
   textarea{ resize:vertical; min-height:60px; }
+  .check-row{ display:flex; align-items:center; gap:8px; margin-top:4px; }
+  .check-row input[type=checkbox]{ width:auto; }
+  .check-row label{ margin:0; text-transform:none; font-size:13px; letter-spacing:0; color:var(--ink); font-weight:500; }
+  .photo-field{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .photo-field input[type=file]{ width:auto; padding:6px; }
+  .photo-preview{ width:56px; height:56px; object-fit:cover; border-radius:var(--radius); border:1px solid var(--line); display:none; }
+  .photo-preview.show{ display:block; }
   .form-actions{ display:flex; gap:10px; margin-top:18px; }
   .gauge-row{ display:flex; gap:14px; flex-wrap:wrap; }
   .gauge-field{ flex:1 1 120px; }
@@ -97,10 +104,12 @@
   .tags{ display:flex; gap:8px; flex-wrap:wrap; margin:12px 0 4px; }
   .tag{ font-size:11px; letter-spacing:.05em; text-transform:uppercase; font-weight:600; color:var(--slate); border:1px solid var(--line); border-radius:999px; padding:3px 10px; }
   .tag.date{ color:var(--ink-soft); }
+  .tag.shared{ color:var(--oxblood); border-color:var(--oxblood); }
   .notes-block{ margin-top:12px; }
   .notes-block dt{ font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--brass); font-weight:700; margin-top:10px; }
   .notes-block dd{ margin:2px 0 0; font-size:14px; color:var(--ink); }
   .aside{ display:flex; flex-direction:column; align-items:flex-end; gap:14px; min-width:132px; }
+  .card-thumb{ width:96px; height:96px; object-fit:cover; border-radius:var(--radius); border:1px solid var(--line); display:block; }
   .score{ font-family:"Space Mono",monospace; font-weight:700; line-height:.9; font-size:52px; color:var(--oxblood); text-align:right; }
   .score small{ display:block; font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--ink-soft); font-weight:600; margin-top:4px; font-family:"Hanken Grotesk",sans-serif; }
   .score.unscored{ color:var(--line); }
@@ -211,6 +220,21 @@
         </div>
         <div class="col-9"><label for="f-notes">Overall notes</label><textarea id="f-notes" placeholder="Verdict, food pairing, whether to buy again…"></textarea></div>
         <div class="col-3"><label for="f-score">Score / 100</label><input id="f-score" type="number" min="0" max="100" placeholder="—" /></div>
+        <div class="col-6">
+          <label>Label photo</label>
+          <div class="photo-field">
+            <img id="f-photo-preview" class="photo-preview" alt="Label preview" />
+            <input type="file" id="f-photo" accept="image/*" capture="environment" />
+            <button type="button" class="icon-btn photo-remove hidden" id="f-photo-remove">Remove photo</button>
+          </div>
+        </div>
+        <div class="col-6">
+          <label>Sharing</label>
+          <div class="check-row">
+            <input type="checkbox" id="f-shared" />
+            <label for="f-shared">Share with my wife (read-only for her)</label>
+          </div>
+        </div>
       </div>
       <div class="form-actions">
         <button type="submit" class="btn primary" id="save-btn">Save tasting</button>
@@ -258,7 +282,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   }
 });
 const TABLE = "tastings";
-let entries = [];   // in-memory copy of the current user's rows
+const PHOTOS_BUCKET = "wine-labels";
+let entries = [];   // in-memory copy of rows you own + rows shared with you
+let currentUserId = null;
+let profiles = {};  // { user_id: email } for yourself + linked partner
+let photoFile = null;         // newly-picked File awaiting upload, if any
+let photoRemoved = false;     // true if "Remove photo" was clicked on an existing entry
+let existingImagePath = null; // image_path already on the entry being edited
 
 /* ---- 1. AUTH --------------------------------------------------- */
 const gate   = document.getElementById("auth-gate");
@@ -281,9 +311,11 @@ function applySession(session){
   gate.classList.toggle("hidden", signedIn);
   appEl.classList.toggle("hidden", !signedIn);
   if(signedIn){
+    currentUserId = session.user.id;
     document.getElementById("user-email").textContent = session.user.email;
     loadEntries().then(render);
   }else{
+    currentUserId = null;
     entries = [];
   }
 }
@@ -347,9 +379,27 @@ document.getElementById("signout-btn").onclick = async ()=>{
    we surface errors to a toast instead of failing silently. */
 async function loadEntries(){
   document.getElementById("count-label").textContent = "Loading…";
+  // RLS returns rows you own AND rows shared with you — no query change needed.
   const { data, error } = await supabase.from(TABLE).select("*");
   if(error){ toast("Couldn't load — "+error.message); console.error(error); entries=[]; return; }
   entries = data || [];
+  await Promise.all([loadProfiles(), resolveImages()]);
+}
+
+async function loadProfiles(){
+  // RLS on `profiles` only ever returns yourself + your linked partner.
+  const { data, error } = await supabase.from("profiles").select("id,email");
+  if(error){ console.error(error); return; }
+  profiles = Object.fromEntries((data||[]).map(p=>[p.id, p.email]));
+}
+
+async function resolveImages(){
+  const paths = entries.map(e=>e.image_path).filter(Boolean);
+  if(!paths.length) return;
+  const { data, error } = await supabase.storage.from(PHOTOS_BUCKET).createSignedUrls(paths, 3600);
+  if(error){ console.error(error); return; }
+  const map = Object.fromEntries((data||[]).filter(d=>d.signedUrl).map(d=>[d.path, d.signedUrl]));
+  entries.forEach(e=>{ if(e.image_path) e._imgUrl = map[e.image_path] || null; });
 }
 
 async function upsertEntry(rec){
@@ -376,7 +426,8 @@ function toRow(e){
     region:n(e.region), grape:n(e.grape), price:n(e.price), date:n(e.date),
     nose:n(e.nose), palate:n(e.palate),
     body:n(e.body), tannin:n(e.tannin), acidity:n(e.acidity), finish:n(e.finish),
-    score:(e.score===null||e.score==="")?null:e.score, notes:n(e.notes)
+    score:(e.score===null||e.score==="")?null:e.score, notes:n(e.notes),
+    shared:!!e.shared, image_path:n(e.image_path)
   };
 }
 
@@ -403,24 +454,34 @@ function structureStrip(e){
 function cardHTML(e){
   const tags = [e.region, e.grape, e.price].filter(Boolean).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
   const dateTag = e.date ? `<span class="tag date">${esc(e.date)}</span>` : "";
+  const mine = e.user_id === currentUserId;
+  const sharedTag = mine
+    ? (e.shared ? `<span class="tag shared">Shared</span>` : "")
+    : `<span class="tag shared">Shared by ${esc(profiles[e.user_id] || "your partner")}</span>`;
   const scoreHTML = (e.score===null||e.score==="")
     ? `<div class="score unscored">—<small>Unscored</small></div>`
     : `<div class="score">${esc(String(e.score))}<small>/ 100</small></div>`;
   const noseDD   = e.nose   ? `<dt>Nose</dt><dd>${esc(e.nose)}</dd>` : "";
   const palateDD = e.palate ? `<dt>Palate</dt><dd>${esc(e.palate)}</dd>` : "";
   const notesDD  = e.notes  ? `<dt>Notes</dt><dd>${esc(e.notes)}</dd>` : "";
+  const thumbHTML = e._imgUrl
+    ? `<a href="${esc(e._imgUrl)}" target="_blank" rel="noopener"><img class="card-thumb" src="${esc(e._imgUrl)}" alt="Label for ${esc(e.name)}" /></a>`
+    : "";
+  const actionsHTML = mine
+    ? `<div class="card-actions">
+        <button class="icon-btn" data-edit="${e.id}">Edit</button>
+        <button class="icon-btn" data-del="${e.id}">Delete</button>
+      </div>`
+    : "";
   return `<article class="card">
     <div class="body">
       <div class="vintage-name">${e.vintage?`<span class="vintage">${esc(e.vintage)}</span>`:""}<h3 class="wine-name">${esc(e.name)}</h3></div>
       ${e.producer?`<p class="producer">${esc(e.producer)}</p>`:""}
-      <div class="tags">${tags}${dateTag}</div>
+      <div class="tags">${tags}${dateTag}${sharedTag}</div>
       <dl class="notes-block">${noseDD}${palateDD}${notesDD}</dl>
-      <div class="card-actions">
-        <button class="icon-btn" data-edit="${e.id}">Edit</button>
-        <button class="icon-btn" data-del="${e.id}">Delete</button>
-      </div>
+      ${actionsHTML}
     </div>
-    <div class="aside">${scoreHTML}${structureStrip(e)}</div>
+    <div class="aside">${thumbHTML}${scoreHTML}${structureStrip(e)}</div>
   </article>`;
 }
 function currentView(){
@@ -449,8 +510,10 @@ function render(){
   document.getElementById("count-label").textContent = entries.length ? `Showing ${list.length} of ${entries.length}` : "";
   cards.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openForm(b.dataset.edit));
   cards.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>del(b.dataset.del));
-  const scored = entries.filter(e=>e.score!==null && e.score!=="");
-  document.getElementById("stat-count").textContent = entries.length;
+  // Stats reflect only tastings you logged yourself, not ones shared to you.
+  const mine = entries.filter(e=>e.user_id===currentUserId);
+  const scored = mine.filter(e=>e.score!==null && e.score!=="");
+  document.getElementById("stat-count").textContent = mine.length;
   document.getElementById("stat-avg").textContent = scored.length ? Math.round(scored.reduce((s,e)=>s+Number(e.score),0)/scored.length) : "—";
   const top = scored.slice().sort((a,b)=>Number(b.score)-Number(a.score))[0];
   document.getElementById("stat-top").textContent = top ? `${top.name} (${top.score})` : "—";
@@ -470,17 +533,54 @@ function openForm(id){
   set("f-nose",e.nose); set("f-palate",e.palate);
   set("f-body",e.body); set("f-tannin",e.tannin); set("f-acidity",e.acidity); set("f-finish",e.finish);
   set("f-notes",e.notes); set("f-score",e.score);
+  document.getElementById("f-shared").checked = !!e.shared;
+
+  photoFile = null; photoRemoved = false; existingImagePath = e.image_path || null;
+  document.getElementById("f-photo").value = "";
+  const preview = document.getElementById("f-photo-preview");
+  const removeBtn = document.getElementById("f-photo-remove");
+  if(e._imgUrl){
+    preview.src = e._imgUrl; preview.classList.add("show");
+    removeBtn.classList.remove("hidden");
+  }else{
+    preview.src = ""; preview.classList.remove("show");
+    removeBtn.classList.add("hidden");
+  }
+
   panel.scrollIntoView({behavior:"smooth", block:"start"});
   document.getElementById("f-name").focus();
 }
-function closeForm(){ panel.classList.add("hidden"); form.reset(); }
+function closeForm(){
+  panel.classList.add("hidden"); form.reset();
+  photoFile = null; photoRemoved = false; existingImagePath = null;
+  document.getElementById("f-photo-preview").classList.remove("show");
+  document.getElementById("f-photo-remove").classList.add("hidden");
+}
 
 form.addEventListener("submit", async ev=>{
   ev.preventDefault();
   const num = id => { const v=document.getElementById(id).value; return v===""?"":Number(v); };
-  const id = document.getElementById("f-id").value;
+  const idField = document.getElementById("f-id").value;
+  const id = idField || uid();
+  const saveBtn = document.getElementById("save-btn");
+  saveBtn.disabled = true;
+
+  // Photo goes to Storage first — the row just stores its path.
+  let imagePath = existingImagePath;
+  if(photoRemoved && existingImagePath){
+    await supabase.storage.from(PHOTOS_BUCKET).remove([existingImagePath]);
+    imagePath = null;
+  }
+  if(photoFile){
+    const path = `${currentUserId}/${id}`;
+    const { error: upErr } = await supabase.storage.from(PHOTOS_BUCKET)
+      .upload(path, photoFile, { upsert:true, contentType: photoFile.type });
+    if(upErr){ toast("Couldn't upload photo — "+upErr.message); console.error(upErr); saveBtn.disabled=false; return; }
+    imagePath = path;
+  }
+
   const rec = {
-    id: id || uid(),
+    id,
     vintage:document.getElementById("f-vintage").value.trim(),
     name:document.getElementById("f-name").value.trim(),
     producer:document.getElementById("f-producer").value.trim(),
@@ -493,16 +593,21 @@ form.addEventListener("submit", async ev=>{
     body:num("f-body"), tannin:num("f-tannin"), acidity:num("f-acidity"), finish:num("f-finish"),
     notes:document.getElementById("f-notes").value.trim(),
     score:document.getElementById("f-score").value===""?null:Number(document.getElementById("f-score").value),
+    shared:document.getElementById("f-shared").checked,
+    image_path:imagePath,
+    user_id:currentUserId,
   };
-  const saveBtn = document.getElementById("save-btn");
-  saveBtn.disabled = true;
   const ok = await upsertEntry(rec);
   saveBtn.disabled = false;
   if(!ok) return;                       // DB rejected → keep form open, error already shown
-  if(id){ entries = entries.map(x=>x.id===id?rec:x); }
+  if(imagePath){
+    const { data } = await supabase.storage.from(PHOTOS_BUCKET).createSignedUrl(imagePath, 3600);
+    rec._imgUrl = data?.signedUrl || null;
+  }
+  if(idField){ entries = entries.map(x=>x.id===idField?rec:x); }
   else  { entries.unshift(rec); }
   closeForm(); render();
-  toast(id ? "Tasting updated" : "Tasting saved");
+  toast(idField ? "Tasting updated" : "Tasting saved");
 });
 
 async function del(id){
@@ -510,6 +615,7 @@ async function del(id){
   if(!confirm(`Delete "${e?.name||"this tasting"}"? This can't be undone.`)) return;
   const ok = await deleteEntry(id);
   if(!ok) return;
+  if(e?.image_path){ await supabase.storage.from(PHOTOS_BUCKET).remove([e.image_path]); }
   entries = entries.filter(x=>x.id!==id);
   render(); toast("Tasting deleted");
 }
@@ -517,7 +623,7 @@ async function del(id){
 /* ---- 6. CSV EXPORT --------------------------------------------- */
 function exportCSV(){
   if(!entries.length){ toast("Nothing to export yet"); return; }
-  const cols = ["vintage","name","producer","region","grape","price","date","nose","palate","body","tannin","acidity","finish","score","notes"];
+  const cols = ["vintage","name","producer","region","grape","price","date","nose","palate","body","tannin","acidity","finish","score","notes","shared"];
   const escCell = v => { v=(v==null)?"":String(v); return /[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v; };
   const rows = [cols.join(",")].concat(entries.map(e=>cols.map(c=>escCell(e[c])).join(",")));
   const blob = new Blob([rows.join("\n")], {type:"text/csv"});
@@ -533,6 +639,22 @@ document.getElementById("cancel-btn").onclick = closeForm;
 document.getElementById("export-btn").onclick = exportCSV;
 document.getElementById("search").oninput     = render;
 document.getElementById("sort").onchange      = render;
+document.getElementById("f-photo").onchange = ev=>{
+  const file = ev.target.files[0];
+  if(!file) return;
+  photoFile = file; photoRemoved = false;
+  const preview = document.getElementById("f-photo-preview");
+  preview.src = URL.createObjectURL(file);
+  preview.classList.add("show");
+  document.getElementById("f-photo-remove").classList.remove("hidden");
+};
+document.getElementById("f-photo-remove").onclick = ()=>{
+  photoFile = null; photoRemoved = true; existingImagePath = null;
+  document.getElementById("f-photo").value = "";
+  const preview = document.getElementById("f-photo-preview");
+  preview.src = ""; preview.classList.remove("show");
+  document.getElementById("f-photo-remove").classList.add("hidden");
+};
 
 initAuth();
 </script>
