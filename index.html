@@ -81,7 +81,9 @@
   .conn-heading{ font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); font-weight:700; margin:0 0 8px; }
   .conn-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-top:1px solid var(--line); font-size:14px; }
   .conn-row:first-of-type{ border-top:none; }
-  .conn-row .conn-actions{ display:flex; gap:6px; flex:0 0 auto; }
+  .conn-row .conn-actions{ display:flex; align-items:center; gap:12px; flex:0 0 auto; }
+  .cellar-share-toggle{ display:flex; align-items:center; gap:5px; font-size:12px; color:var(--ink-soft); text-transform:none; letter-spacing:0; font-weight:500; white-space:nowrap; }
+  .cellar-share-toggle input{ width:auto; }
   .shared-group{ margin-bottom:28px; }
   .shared-group-title{ font-family:"Fraunces",serif; font-weight:600; font-size:18px; margin:0 0 12px; padding-bottom:8px; border-bottom:1px solid var(--line); }
   #connect-msg{ font-size:13px; margin-top:10px; min-height:18px; color:var(--slate); }
@@ -415,9 +417,10 @@ let photoRemoved = false;     // true if "Remove photo" was clicked on an existi
 let existingImagePath = null; // image_path already on the entry being edited
 let commentsByTasting = {};   // { tasting_id: [comment, ...] }
 let openThreads = new Set();  // tasting ids whose comment thread is expanded
-let connections = [];         // user_ids you're connected with (tasting/comment sharing only)
+let connections = [];         // [{id, shareCellar}] — people you're connected with
 let incomingRequests = [];    // connection_requests where you're the recipient
 let outgoingRequests = [];    // connection_requests where you're the requester
+let householdIds = [];        // user_ids in `partners` with you (full-edit cellar access)
 
 /* ---- 1. AUTH --------------------------------------------------- */
 const gate   = document.getElementById("auth-gate");
@@ -442,12 +445,12 @@ function applySession(session){
   if(signedIn){
     currentUserId = session.user.id;
     document.getElementById("user-email").textContent = session.user.email;
-    Promise.all([loadEntries(), loadCellar(), loadConnectionsData()])
+    Promise.all([loadEntries(), loadCellar(), loadConnectionsData(), loadHousehold()])
       .then(()=>{ render(); renderCellar(); renderConnections(); });
   }else{
     currentUserId = null;
     entries = []; cellarItems = []; commentsByTasting = {}; openThreads = new Set();
-    connections = []; incomingRequests = []; outgoingRequests = [];
+    connections = []; incomingRequests = []; outgoingRequests = []; householdIds = [];
   }
 }
 
@@ -837,9 +840,22 @@ function exportCSV(){
    Bottles you own but haven't tasted yet. Unlike tastings, this is
    fully shared — both linked partners can see AND edit every row. */
 async function loadCellar(){
+  // Includes both your own household's rows AND read-only rows from
+  // connections who've shared their cellar with you — renderCellar()
+  // and renderSharedGroups() split them back apart using householdIds.
   const { data, error } = await supabase.from(CELLAR_TABLE).select("*");
   if(error){ toast("Couldn't load cellar — "+error.message); console.error(error); cellarItems=[]; return; }
   cellarItems = data || [];
+}
+
+async function loadHousehold(){
+  const { data, error } = await supabase.from("partners").select("partner");
+  if(error){ console.error(error); householdIds = []; return; }
+  householdIds = (data||[]).map(p=>p.partner);
+}
+
+function isMyCellar(item){
+  return item.added_by === currentUserId || householdIds.includes(item.added_by);
 }
 
 async function upsertCellarItem(rec){
@@ -889,11 +905,14 @@ function cellarCardHTML(item){
 }
 
 function renderCellar(){
+  // This tab is your household's editable pool only — cellar items
+  // visible to you only because a connection shared theirs (read-only)
+  // live in the Shared tab instead (see renderSharedGroups()).
   const cards = document.getElementById("cellar-cards");
-  const list = cellarItems.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+  const list = cellarItems.filter(isMyCellar).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
   cards.innerHTML = list.map(cellarCardHTML).join("");
-  document.getElementById("cellar-empty").classList.toggle("hidden", cellarItems.length>0);
-  document.getElementById("cellar-count-label").textContent = cellarItems.length ? `${cellarItems.length} in the rack` : "";
+  document.getElementById("cellar-empty").classList.toggle("hidden", list.length>0);
+  document.getElementById("cellar-count-label").textContent = list.length ? `${list.length} in the rack` : "";
   cards.querySelectorAll("[data-cellar-edit]").forEach(b=>b.onclick=()=>openCellarForm(b.dataset.cellarEdit));
   cards.querySelectorAll("[data-cellar-del]").forEach(b=>b.onclick=()=>delCellar(b.dataset.cellarDel));
   cards.querySelectorAll("[data-cellar-log]").forEach(b=>b.onclick=()=>logTasting(b.dataset.cellarLog));
@@ -1016,14 +1035,16 @@ function breakdownSVG(list, field){
 /* ---- 9. CONNECTIONS ----------------------------------------------
    Self-service sharing with any number of friends/family via
    search-by-email + request/accept. Deliberately separate from
-   `partners` (household, also grants cellar access) — connections
-   only ever grant tasting/comment visibility, never cellar. */
+   `partners` (household, full-edit cellar access) — connections
+   grant tasting/comment visibility always, and cellar visibility
+   (read-only) only if you flip that on for them individually. */
 async function loadConnectionsData(){
   const [{data:conn,error:e1}, {data:reqs,error:e2}] = await Promise.all([
-    supabase.from("connections").select("owner,partner"),
+    supabase.from("connections").select("owner,partner,share_cellar"),
     supabase.from("connection_requests").select("*")
   ]);
-  if(e1){ console.error(e1); connections = []; } else { connections = (conn||[]).map(c=>c.partner); }
+  if(e1){ console.error(e1); connections = []; }
+  else { connections = (conn||[]).map(c=>({ id:c.partner, shareCellar:!!c.share_cellar })); }
   if(e2){ console.error(e2); incomingRequests = []; outgoingRequests = []; return; }
   incomingRequests = (reqs||[]).filter(r=>r.recipient===currentUserId);
   outgoingRequests = (reqs||[]).filter(r=>r.requester===currentUserId);
@@ -1041,7 +1062,7 @@ async function sendConnectionRequest(email){
   const found = (data||[])[0];
   if(!found){ connectMsg("No account found with that email.", true); return; }
   if(found.id === currentUserId){ connectMsg("That's you!", true); return; }
-  if(connections.includes(found.id)){ connectMsg("You're already connected.", true); return; }
+  if(connections.some(c=>c.id===found.id)){ connectMsg("You're already connected.", true); return; }
   // If they already requested you, accept it instead of creating a duplicate pending request.
   const theirRequest = incomingRequests.find(r=>r.requester===found.id);
   if(theirRequest){
@@ -1061,8 +1082,15 @@ async function sendConnectionRequest(email){
 async function acceptRequest(id){
   const { error } = await supabase.rpc("accept_connection_request", { req_id: id });
   if(error){ toast("Couldn't accept — "+error.message); console.error(error); return; }
-  await Promise.all([loadConnectionsData(), loadEntries()]);
+  await Promise.all([loadConnectionsData(), loadEntries(), loadCellar()]);
   renderConnections(); renderSharedGroups();
+}
+
+async function toggleCellarSharing(otherId, share){
+  const { error } = await supabase.rpc("set_cellar_sharing", { other: otherId, share });
+  if(error){ toast("Couldn't update — "+error.message); console.error(error); return false; }
+  connections = connections.map(c=>c.id===otherId ? {...c, shareCellar:share} : c);
+  return true;
 }
 
 async function removeRequest(id){
@@ -1076,7 +1104,7 @@ async function removeConnection(otherId){
   if(!confirm("Remove this connection? They'll lose access to anything you've shared, and you to theirs.")) return;
   const { error } = await supabase.rpc("remove_connection", { other: otherId });
   if(error){ toast("Couldn't remove — "+error.message); console.error(error); return; }
-  await Promise.all([loadConnectionsData(), loadEntries()]);
+  await Promise.all([loadConnectionsData(), loadEntries(), loadCellar()]);
   renderConnections(); renderSharedGroups();
 }
 
@@ -1097,9 +1125,14 @@ function renderConnections(){
         </div>`).join("")}</div>`
     : "";
   const connHTML = connections.length
-    ? `<div class="conn-block"><p class="conn-heading">Your connections</p>${connections.map(id=>`
-        <div class="conn-row"><span>${esc(profiles[id] || id)}</span>
-          <span class="conn-actions"><button class="icon-btn" data-remove-conn="${id}">Remove</button></span>
+    ? `<div class="conn-block"><p class="conn-heading">Your connections</p>${connections.map(c=>`
+        <div class="conn-row"><span>${esc(profiles[c.id] || c.id)}</span>
+          <span class="conn-actions">
+            <label class="cellar-share-toggle">
+              <input type="checkbox" data-toggle-cellar="${c.id}" ${c.shareCellar?"checked":""} /> Share my cellar
+            </label>
+            <button class="icon-btn" data-remove-conn="${c.id}">Remove</button>
+          </span>
         </div>`).join("")}</div>`
     : "";
   const incomingEl = document.getElementById("requests-incoming");
@@ -1112,23 +1145,53 @@ function renderConnections(){
   incomingEl.querySelectorAll("[data-decline-req]").forEach(b=>b.onclick=()=>removeRequest(b.dataset.declineReq));
   outgoingEl.querySelectorAll("[data-cancel-req]").forEach(b=>b.onclick=()=>removeRequest(b.dataset.cancelReq));
   connEl.querySelectorAll("[data-remove-conn]").forEach(b=>b.onclick=()=>removeConnection(b.dataset.removeConn));
+  connEl.querySelectorAll("[data-toggle-cellar]").forEach(cb=>cb.onchange=async ()=>{
+    const wanted = cb.checked;
+    const ok = await toggleCellarSharing(cb.dataset.toggleCellar, wanted);
+    if(!ok) cb.checked = !wanted;
+  });
+}
+
+function sharedCellarCardHTML(item){
+  const tags = [item.region, item.grape, item.price].filter(Boolean).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+  const notesDD = item.notes ? `<dl class="notes-block"><dt>Notes</dt><dd>${esc(item.notes)}</dd></dl>` : "";
+  return `<article class="card">
+    <div class="body">
+      <div class="vintage-name">${item.vintage?`<span class="vintage">${esc(item.vintage)}</span>`:""}<h3 class="wine-name">${esc(item.name)}</h3></div>
+      ${item.producer?`<p class="producer">${esc(item.producer)}</p>`:""}
+      <div class="tags">${tags}</div>
+      ${notesDD}
+    </div>
+    <div class="aside">
+      <div class="score">${esc(String(item.quantity))}<small>in cellar</small></div>
+    </div>
+  </article>`;
 }
 
 function renderSharedGroups(){
-  const sharedIn = entries.filter(e=>e.user_id!==currentUserId);
+  const sharedTastings = entries.filter(e=>e.user_id!==currentUserId);
+  const sharedCellar = cellarItems.filter(item=>!isMyCellar(item));
   const byPerson = {};
-  sharedIn.forEach(e=>{ (byPerson[e.user_id] ||= []).push(e); });
+  sharedTastings.forEach(e=>{ (byPerson[e.user_id] ||= { tastings:[], cellar:[] }).tastings.push(e); });
+  sharedCellar.forEach(item=>{ (byPerson[item.added_by] ||= { tastings:[], cellar:[] }).cellar.push(item); });
   const peopleIds = Object.keys(byPerson);
   const container = document.getElementById("shared-groups");
   document.getElementById("shared-empty").classList.toggle("hidden", peopleIds.length>0);
   document.getElementById("shared-count-label").textContent = peopleIds.length
     ? `Shared by ${peopleIds.length} connection${peopleIds.length===1?"":"s"}` : "";
   container.innerHTML = peopleIds.map(uid=>{
-    const list = byPerson[uid].slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+    const group = byPerson[uid];
+    const tastingList = group.tastings.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+    const cellarList = group.cellar.slice().sort((a,b)=>(a.name||"").localeCompare(b.name||""));
     const name = profiles[uid] || "A connection";
+    const tastingsHTML = tastingList.length
+      ? `<div class="cards">${tastingList.map(e=>cardHTML(e,false)).join("")}</div>` : "";
+    const cellarHTML = cellarList.length
+      ? `<p class="conn-heading" style="margin-top:16px;">Their cellar</p><div class="cards">${cellarList.map(sharedCellarCardHTML).join("")}</div>`
+      : "";
     return `<div class="shared-group">
       <h3 class="shared-group-title">${esc(name)}</h3>
-      <div class="cards">${list.map(e=>cardHTML(e,false)).join("")}</div>
+      ${tastingsHTML}${cellarHTML}
     </div>`;
   }).join("");
   wireCardEvents(container, renderSharedGroups);
@@ -1168,7 +1231,7 @@ document.getElementById("connect-form").addEventListener("submit", async ev=>{
   emailField.value = "";
 });
 document.getElementById("connections-refresh-btn").onclick = async ()=>{
-  await Promise.all([loadConnectionsData(), loadEntries()]);
+  await Promise.all([loadConnectionsData(), loadEntries(), loadCellar()]);
   renderConnections(); renderSharedGroups();
 };
 function switchView(view){

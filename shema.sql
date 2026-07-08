@@ -443,3 +443,41 @@ create policy "select own or linked profile" on public.profiles
     or id in (select requester from public.connection_requests where recipient = auth.uid())
     or id in (select recipient from public.connection_requests where requester = auth.uid())
   );
+
+-- ============================================================
+--  11. CELLAR SHARING — opt specific connections into VIEW-ONLY
+--      cellar access, separate from tasting sharing. Household
+--      (`partners`) keeps full edit rights as before; this only
+--      ever grants read access, and only to whoever you pick.
+--      "Your cellar" here means your whole household's pool (you
+--      + anyone in `partners` with you), matching what you see
+--      yourself on the Cellar tab — not just your own added rows.
+-- ============================================================
+alter table public.connections add column if not exists share_cellar boolean not null default false;
+
+-- Toggle via RPC rather than a raw UPDATE policy, so a client can
+-- only ever flip the flag on a row it already owns — never touch
+-- who a connection actually is.
+create or replace function public.set_cellar_sharing(other uuid, share boolean)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update public.connections set share_cellar = share
+  where owner = auth.uid() and partner = other;
+$$;
+grant execute on function public.set_cellar_sharing(uuid, boolean) to authenticated;
+
+drop policy if exists "select cellar shared with me" on public.cellar;
+create policy "select cellar shared with me" on public.cellar
+  for select using (
+    exists (
+      select 1 from public.connections c
+      where c.partner = auth.uid() and c.share_cellar = true
+        and (
+          c.owner = cellar.added_by
+          or exists (select 1 from public.partners p where p.owner = c.owner and p.partner = cellar.added_by)
+        )
+    )
+  );
