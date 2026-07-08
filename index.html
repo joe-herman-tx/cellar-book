@@ -946,13 +946,15 @@ function breakdownSVG(list, field){
   const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,6);
   if(!top.length) return `<p class="producer">No ${esc(field)} data yet.</p>`;
   const max = top[0][1];
-  const rowH = 28, W = 640, H = top.length*rowH + 10, barMaxW = W-160;
+  const LABEL_W = 170, COUNT_W = 26, rowH = 28, W = 640, H = top.length*rowH + 10;
+  const barMaxW = W - LABEL_W - COUNT_W - 12;
+  const truncate = s => s.length > 24 ? s.slice(0,23)+"…" : s;
   const rows = top.map(([label,count],i)=>{
     const y = i*rowH;
     const w = Math.max(4, (count/max)*barMaxW);
-    return `<text x="0" y="${y+16}" font-size="12" fill="var(--ink)">${esc(label)}</text>
-      <rect x="150" y="${y+4}" width="${w}" height="16" fill="var(--brass)" rx="2" />
-      <text x="${150+w+8}" y="${y+16}" font-size="12" fill="var(--ink-soft)">${count}</text>`;
+    return `<text x="0" y="${y+16}" font-size="12" fill="var(--ink)">${esc(truncate(label))}<title>${esc(label)}</title></text>
+      <rect x="${LABEL_W}" y="${y+4}" width="${w}" height="16" fill="var(--brass)" rx="2" />
+      <text x="${LABEL_W+w+8}" y="${y+16}" font-size="12" fill="var(--ink-soft)">${count}</text>`;
   }).join("");
   return `<svg viewBox="0 0 ${W} ${H}" class="chart-svg">${rows}</svg>`;
 }
