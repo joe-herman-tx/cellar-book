@@ -102,8 +102,8 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: ANTHROPIC_MODEL,
-        max_tokens: 700,
-        system: "You're a knowledgeable wine recommender. Given a wine's details, suggest 3-5 genuinely comparable bottles based on style, region, grape, and quality tier — general similarity, not personalized to any individual's taste. Real, findable wines only, no invented producers. Call the record_suggestions tool exactly once.",
+        max_tokens: 1024,
+        system: "You're a knowledgeable wine recommender. Given a wine's details, suggest 3-5 genuinely comparable bottles based on style, region, grape, and quality tier — general similarity, not personalized to any individual's taste. Real, findable wines only, no invented producers. Keep each reason to one short sentence so you stay well within your output budget. Call the record_suggestions tool exactly once.",
         tools: [tool],
         tool_choice: { type: "tool", name: "record_suggestions" },
         messages: [{
@@ -120,10 +120,19 @@ Deno.serve(async (req) => {
     }
 
     const result = await anthropicRes.json();
-    const toolUse = (result.content || []).find((b: any) => b.type === "tool_use");
-    if (!toolUse) return json({ error: "Couldn't come up with suggestions for this wine." }, 502);
+    if (result.stop_reason === "max_tokens") {
+      console.error("Anthropic response truncated at max_tokens", JSON.stringify(result));
+      return json({ error: "Response got cut off — try again." }, 502);
+    }
 
-    return json(toolUse.input, 200);
+    const toolUse = (result.content || []).find((b: any) => b.type === "tool_use");
+    const suggestions = toolUse?.input?.suggestions;
+    if (!Array.isArray(suggestions) || suggestions.length === 0) {
+      console.error("Unexpected suggestions shape", JSON.stringify(result));
+      return json({ error: "Couldn't come up with suggestions for this wine — try again." }, 502);
+    }
+
+    return json({ suggestions }, 200);
   } catch (err) {
     console.error(err);
     return json({ error: "Unexpected error getting suggestions." }, 500);

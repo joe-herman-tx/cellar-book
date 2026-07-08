@@ -305,7 +305,8 @@
   <section id="view-cellar" class="hidden">
     <div class="toolbar">
       <div style="flex:1 1 auto;"></div>
-      <button class="btn primary" id="cellar-new-btn">+ Add bottle</button>
+      <button class="btn primary" id="cellar-scan-new-btn">Scan label</button>
+      <button class="btn ghost" id="cellar-new-btn">Manual add</button>
     </div>
 
     <section class="panel hidden" id="cellar-form-panel">
@@ -1475,7 +1476,11 @@ async function suggestSimilarWines(){
       toast("Couldn't get suggestions — "+msg);
       return;
     }
-    const list = data.suggestions || [];
+    const list = Array.isArray(data?.suggestions) ? data.suggestions : [];
+    if(!list.length){
+      resultsEl.innerHTML = `<p class="producer">No suggestions came back — try again.</p>`;
+      return;
+    }
     resultsEl.innerHTML = list.map(s=>`
       <div class="similar-wine">
         <div class="sw-name">${esc(s.name)}</div>
@@ -1524,6 +1529,10 @@ document.getElementById("f-scan-btn").onclick = ()=>{
   if(photoFile) scanLabel(photoFile, "f", "f-scan-btn");
 };
 document.getElementById("cellar-new-btn").onclick    = ()=>openCellarForm(null);
+document.getElementById("cellar-scan-new-btn").onclick = ()=>{
+  openCellarForm(null);
+  document.getElementById("c-photo").click();
+};
 document.getElementById("cellar-cancel-btn").onclick = closeCellarForm;
 document.getElementById("c-photo").onchange = ev=>{
   const file = ev.target.files[0];
@@ -1534,6 +1543,7 @@ document.getElementById("c-photo").onchange = ev=>{
   preview.classList.add("show");
   document.getElementById("c-photo-remove").classList.remove("hidden");
   document.getElementById("c-scan-btn").classList.remove("hidden");
+  scanLabel(file, "c", "c-scan-btn"); // auto-scan as soon as a photo is picked
 };
 document.getElementById("c-photo-remove").onclick = ()=>{
   cellarPhotoFile = null; cellarPhotoRemoved = true; cellarExistingImagePath = null;
