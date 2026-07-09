@@ -129,7 +129,14 @@ Deno.serve(async (req) => {
     const suggestions = toolUse?.input?.suggestions;
     if (!Array.isArray(suggestions) || suggestions.length === 0) {
       console.error("Unexpected suggestions shape", JSON.stringify(result));
-      return json({ error: "Couldn't come up with suggestions for this wine — try again." }, 502);
+      // TEMPORARY debug detail in the error itself (not just server logs, which
+      // aren't easily reachable from this CLI version) so we can see exactly
+      // what came back without dashboard access. Remove once diagnosed.
+      const blockTypes = (result.content || []).map((b: any) => b.type).join(",") || "none";
+      const toolInputPreview = toolUse ? JSON.stringify(toolUse.input).slice(0, 200) : "no tool_use block";
+      return json({
+        error: `Couldn't come up with suggestions for this wine — try again. [debug: stop_reason=${result.stop_reason}, blocks=${blockTypes}, input=${toolInputPreview}]`,
+      }, 502);
     }
 
     return json({ suggestions }, 200);
