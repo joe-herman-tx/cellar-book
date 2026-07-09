@@ -111,10 +111,15 @@
   /* ---------- Vintage chart ---------- */
   .vintage-table{ border-collapse:collapse; }
   .vintage-table th, .vintage-table td{ padding:0; }
-  .vintage-region-cell{ text-align:left; padding:6px 12px 6px 0 !important; font-size:13px; font-weight:600; white-space:nowrap; position:sticky; left:0; background:var(--paper-2); }
-  .vintage-remove-btn{ font-size:14px; padding:0 0 0 6px; line-height:1; }
-  .vintage-year-head{ font-size:9px; color:var(--ink-soft); font-weight:600; text-align:center; padding-bottom:4px !important; }
-  .vintage-cell{ width:22px; height:22px; border:1px solid var(--paper-2); background:var(--line); cursor:pointer; }
+  .vintage-region-cell{ text-align:left; padding:8px 14px 8px 0 !important; font-size:13px; font-weight:600; white-space:nowrap; position:sticky; left:0; background:var(--paper-2); }
+  .vintage-remove-btn{ font-size:16px; padding:0 4px; line-height:1; }
+  .vintage-year-head{ min-width:26px; font-size:9px; color:var(--ink-soft); font-weight:600; text-align:center; padding-bottom:6px !important; }
+  /* min-width (not just width) so the table's auto layout can't compress
+     cells below a legible/tappable size on narrow screens — without it,
+     the browser squeezes every column to fit the viewport instead of
+     letting #vintage-chart-wrap's overflow-x:auto do its job. */
+  .vintage-cell{ width:26px; min-width:26px; height:26px; border:1px solid var(--paper-2); background:var(--line); cursor:pointer; }
+  .vintage-chart-wrap{ margin-top:16px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
   .vintage-cell:hover{ outline:2px solid var(--ink); outline-offset:-2px; }
   .vintage-legend{ display:flex; gap:14px; flex-wrap:wrap; margin-top:14px; font-size:12px; color:var(--ink-soft); }
   .vintage-swatch{ display:inline-block; width:12px; height:12px; border-radius:2px; margin-right:5px; vertical-align:middle; }
@@ -545,7 +550,7 @@
         </form>
       </div>
       <p style="font-size:13px; color:var(--ink-soft); margin:8px 0 0;">A general guide to how good each vintage was — starts with major world regions plus anything from your own tastings and cellar. Click any cell to see real wines to source at that region and vintage. Add any other region you're curious about, or remove a row you don't need.</p>
-      <div id="vintage-chart-wrap" style="margin-top:16px; overflow-x:auto;"></div>
+      <div id="vintage-chart-wrap" class="vintage-chart-wrap"></div>
       <p class="producer hidden" id="vintage-empty">No regions yet — add one above.</p>
     </section>
 
