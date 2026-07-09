@@ -95,6 +95,14 @@
   .similar-wine .sw-meta{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
   .similar-wine .sw-reason{ font-size:13px; margin-top:6px; }
 
+  /* ---------- Lookup ---------- */
+  .lookup-description{ font-size:14px; margin-top:12px; line-height:1.55; }
+  .lookup-history-list{ display:flex; flex-direction:column; gap:0; margin-top:6px; }
+  .lookup-history-item{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:10px 0; border-top:1px solid var(--line); background:none; border-left:none; border-right:none; border-bottom:none; width:100%; text-align:left; cursor:pointer; font-family:inherit; }
+  .lookup-history-item:first-child{ border-top:none; }
+  .lookup-history-item:hover .wine-name{ color:var(--oxblood); }
+  .lookup-history-item .wine-name{ font-size:15px; }
+
   /* ---------- Toolbar ---------- */
   .toolbar{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:20px 0 24px; }
   .toolbar input[type=search]{ flex:1 1 220px; min-width:180px; }
@@ -221,6 +229,7 @@
     <button class="view-tab" data-view="cellar">Cellar</button>
     <button class="view-tab" data-view="shared">Shared</button>
     <button class="view-tab" data-view="stats">Stats</button>
+    <button class="view-tab" data-view="lookup">Lookup</button>
   </nav>
 
   <section id="view-log">
@@ -456,6 +465,35 @@
     </section>
   </section>
 
+  <section id="view-lookup" class="hidden">
+    <section class="panel">
+      <h2>Scan a label</h2>
+      <p style="font-size:13px; color:var(--ink-soft); margin:-8px 0 14px;">Read the details of a wine without saving it anywhere. Take a look, then decide if it's worth adding to your cellar or logging a tasting.</p>
+      <div class="photo-field">
+        <input type="file" id="lookup-photo" accept="image/*" class="hidden" />
+        <button type="button" class="btn primary" id="lookup-scan-btn">Scan label</button>
+      </div>
+    </section>
+
+    <section class="panel hidden" id="lookup-result-panel">
+      <h2>What I found</h2>
+      <div id="lookup-result"></div>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" id="lookup-add-cellar-btn">Add to cellar</button>
+        <button type="button" class="btn ghost" id="lookup-log-tasting-btn">Log a tasting</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:baseline;">
+        <h2>Recently looked up</h2>
+        <button type="button" class="icon-btn" id="lookup-clear-history-btn">Clear history</button>
+      </div>
+      <div id="lookup-history"></div>
+      <p class="producer hidden" id="lookup-history-empty">Nothing scanned yet — labels you look up will show up here.</p>
+    </section>
+  </section>
+
   <footer class="foot">
     <span>Saved to your account · syncs to every device you sign in on.</span>
     <span>Export to CSV anytime to back up or open in Excel.</span>
@@ -511,6 +549,9 @@ let outgoingRequests = [];    // connection_requests where you're the requester
 let householdIds = [];        // user_ids in `partners` with you (full-edit cellar access)
 let incomingHouseholdRequests = []; // household_requests where you're the recipient
 let outgoingHouseholdRequests = []; // household_requests where you're the requester
+const LOOKUP_HISTORY_KEY = "cellarbook.recentLookups";
+let recentLookups = [];       // device-local scan history, not synced — see loadLookupHistory()
+let currentLookup = null;     // the lookup result currently shown, for the promote buttons
 
 /* ---- 1. AUTH --------------------------------------------------- */
 const gate   = document.getElementById("auth-gate");
@@ -1126,10 +1167,10 @@ function renderCellar(){
 
 const cellarPanel = document.getElementById("cellar-form-panel");
 const cellarForm  = document.getElementById("cellar-form");
-function openCellarForm(id){
+function openCellarForm(id, prefill){
   cellarPanel.classList.remove("hidden");
   document.getElementById("cellar-form-title").textContent = id ? "Edit bottle" : "Add bottle";
-  const item = id ? cellarItems.find(x=>x.id===id) : {};
+  const item = id ? cellarItems.find(x=>x.id===id) : (prefill || {});
   const set = (f,v)=> document.getElementById(f).value = (v===null||v===undefined)?"":v;
   document.getElementById("c-id").value = id || "";
   set("c-vintage",item.vintage); set("c-name",item.name); set("c-producer",item.producer);
@@ -1722,6 +1763,106 @@ async function inviteFriend(){
   }
 }
 
+/* ---- 10b. LOOKUP -------------------------------------------------
+   Scan a label just to read about it — nothing is written to the
+   tastings or cellar tables until you explicitly promote a result.
+   History is a device-local scratchpad in localStorage (last 10),
+   not synced to the account. */
+function loadLookupHistory(){
+  try{
+    const raw = localStorage.getItem(LOOKUP_HISTORY_KEY);
+    recentLookups = raw ? JSON.parse(raw) : [];
+  }catch(err){
+    console.error(err);
+    recentLookups = [];
+  }
+}
+function saveLookupHistory(){
+  localStorage.setItem(LOOKUP_HISTORY_KEY, JSON.stringify(recentLookups));
+}
+function addToLookupHistory(data){
+  recentLookups.unshift(data);
+  recentLookups = recentLookups.slice(0, 10);
+  saveLookupHistory();
+}
+
+function lookupResultHTML(data){
+  const tags = [data.region, data.grape, data.color].filter(Boolean)
+    .map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+  const est = [
+    data.drink_window ? `<dt>Drink window</dt><dd>${esc(data.drink_window)}</dd>` : "",
+    data.decant_time ? `<dt>Decant</dt><dd>${esc(data.decant_time)}</dd>` : "",
+  ].join("");
+  return `
+    <div class="vintage-name">
+      ${data.vintage ? `<span class="vintage">${esc(data.vintage)}</span>` : ""}
+      <h3 class="wine-name">${esc(data.name || "Unknown wine")}</h3>
+    </div>
+    ${data.producer ? `<p class="producer">${esc(data.producer)}</p>` : ""}
+    ${tags ? `<div class="tags">${tags}</div>` : ""}
+    ${data.description ? `<p class="lookup-description">${esc(data.description)}</p>` : ""}
+    ${est ? `<dl class="notes-block">${est}</dl>` : ""}
+  `;
+}
+
+function renderLookupResult(data){
+  currentLookup = data;
+  document.getElementById("lookup-result").innerHTML = lookupResultHTML(data);
+  document.getElementById("lookup-result-panel").classList.remove("hidden");
+  document.getElementById("lookup-result-panel").scrollIntoView({behavior:"smooth", block:"start"});
+}
+
+function renderLookupHistory(){
+  const list = document.getElementById("lookup-history");
+  const empty = document.getElementById("lookup-history-empty");
+  if(!recentLookups.length){
+    list.innerHTML = "";
+    empty.classList.remove("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
+  list.innerHTML = `<div class="lookup-history-list">${recentLookups.map((d,i)=>`
+    <button type="button" class="lookup-history-item" data-idx="${i}">
+      <span class="wine-name">${d.vintage ? esc(d.vintage)+" " : ""}${esc(d.name || "Unknown wine")}</span>
+      <span class="producer">${esc(d.producer || "")}</span>
+    </button>`).join("")}</div>`;
+  list.querySelectorAll(".lookup-history-item").forEach(btn=>{
+    btn.onclick = ()=> renderLookupResult(recentLookups[Number(btn.dataset.idx)]);
+  });
+}
+
+async function scanForLookup(file){
+  const btn = document.getElementById("lookup-scan-btn");
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = "Scanning…";
+  try{
+    const resized = await resizeImageForScan(file);
+    const imageBase64 = await blobToBase64(resized);
+    const { data, error } = await supabase.functions.invoke("scan-label", {
+      body: { imageBase64, mimeType: "image/jpeg" }
+    });
+    if(error){
+      let msg = error.message;
+      try{ const body = await error.context.json(); if(body?.error) msg = body.error; }catch(_){}
+      toast("Couldn't scan — "+msg);
+      return;
+    }
+    addToLookupHistory(data);
+    renderLookupHistory();
+    renderLookupResult(data);
+  }catch(err){
+    toast("Couldn't scan — "+err.message);
+    console.error(err);
+  }finally{
+    btn.disabled = false; btn.textContent = originalText;
+  }
+}
+
+function lookupPrefill(){
+  const d = currentLookup || {};
+  return { vintage:d.vintage, name:d.name, producer:d.producer, region:d.region, grape:d.grape, color:d.color, drink_window:d.drink_window, decant_time:d.decant_time };
+}
+
 /* ---- 11. WIRE UP & START ---------------------------------------- */
 ["f-body","f-tannin","f-acidity","f-finish"].forEach(id=>{ document.getElementById(id).innerHTML = gaugeOptions; });
 document.getElementById("new-btn").onclick    = ()=>openForm(null);
@@ -1804,14 +1945,39 @@ document.getElementById("connections-refresh-btn").onclick = async ()=>{
   renderConnections(); renderCellar(); renderSharedGroups();
 };
 document.getElementById("invite-btn").onclick = inviteFriend;
+document.getElementById("lookup-scan-btn").onclick = ()=> document.getElementById("lookup-photo").click();
+document.getElementById("lookup-photo").onchange = ev=>{
+  const file = ev.target.files[0];
+  if(!file) return;
+  scanForLookup(file);
+  ev.target.value = "";
+};
+document.getElementById("lookup-add-cellar-btn").onclick = ()=>{
+  const prefill = lookupPrefill();
+  switchView("cellar");
+  openCellarForm(null, prefill);
+};
+document.getElementById("lookup-log-tasting-btn").onclick = ()=>{
+  const prefill = lookupPrefill();
+  switchView("log");
+  openForm(null, prefill);
+};
+document.getElementById("lookup-clear-history-btn").onclick = ()=>{
+  recentLookups = [];
+  saveLookupHistory();
+  renderLookupHistory();
+};
+loadLookupHistory();
 function switchView(view){
   document.querySelectorAll(".view-tab").forEach(b=>b.classList.toggle("active", b.dataset.view===view));
   document.getElementById("view-log").classList.toggle("hidden", view!=="log");
   document.getElementById("view-cellar").classList.toggle("hidden", view!=="cellar");
   document.getElementById("view-shared").classList.toggle("hidden", view!=="shared");
   document.getElementById("view-stats").classList.toggle("hidden", view!=="stats");
+  document.getElementById("view-lookup").classList.toggle("hidden", view!=="lookup");
   if(view==="stats") renderStats();
   if(view==="shared"){ renderConnections(); renderSharedGroups(); }
+  if(view==="lookup") renderLookupHistory();
 }
 document.querySelectorAll(".view-tab").forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 
