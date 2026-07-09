@@ -260,6 +260,7 @@
     <button class="view-tab" data-view="stats">Stats</button>
     <button class="view-tab" data-view="lookup">Recent Searches</button>
     <button class="view-tab" data-view="vintage">Vintage Chart</button>
+    <button class="view-tab" data-view="grapes">Grape Guide</button>
   </nav>
 
   <section id="view-log">
@@ -507,6 +508,10 @@
         <input type="file" id="lookup-photo" accept="image/*" class="hidden" />
         <button type="button" class="btn primary" id="lookup-scan-btn">Scan label</button>
       </div>
+      <form id="lookup-manual-form" style="display:flex; gap:8px; margin-top:12px;">
+        <input type="text" id="lookup-manual-input" placeholder="Or type what's on a wine list…" />
+        <button type="submit" class="btn ghost" id="lookup-manual-btn">Search</button>
+      </form>
     </section>
 
     <section class="panel hidden" id="lookup-result-panel">
@@ -550,6 +555,21 @@
         <button type="button" class="icon-btn" id="vintage-cell-close-btn">Close</button>
       </div>
       <div id="vintage-cell-results"></div>
+    </section>
+  </section>
+
+  <section id="view-grapes" class="hidden">
+    <section class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:10px;">
+        <h2>Grape guide</h2>
+        <form id="grape-add-form" style="display:flex; gap:8px;">
+          <input type="text" id="grape-add-input" placeholder="Add a grape…" style="width:auto;" />
+          <button type="submit" class="btn ghost">Add</button>
+        </form>
+      </div>
+      <p style="font-size:13px; color:var(--ink-soft); margin:8px 0 0;">High-level talking points and typical structure for major grape varieties — starts with a curated list. Add any other grape, or remove one you don't need.</p>
+      <div id="grape-cards-wrap" style="margin-top:16px;"></div>
+      <p class="producer hidden" id="grapes-empty">No grapes yet — add one above.</p>
     </section>
   </section>
 
@@ -617,6 +637,11 @@ const VINTAGE_CHART_HIDDEN_KEY = "vines.vintageChartHiddenRegions";
 let vintageRatings = {};              // { [region]: [{year,rating,note}, ...] } — in-memory cache for this session
 let vintageChartExtraRegions = [];    // device-local list of manually-added regions — see loadVintageChartRegions()
 let vintageChartHiddenRegions = [];   // device-local list of default/extra regions you've removed from view
+const GRAPE_GUIDE_KEY = "vines.grapeGuideExtraGrapes";
+const GRAPE_GUIDE_HIDDEN_KEY = "vines.grapeGuideHiddenGrapes";
+let grapeProfiles = {};        // { [grape]: {description,body,tannin,acidity,finish,nose,palate,best_regions,notable_vintages} }
+let grapeGuideExtraGrapes = [];  // device-local list of manually-added grapes
+let grapeGuideHiddenGrapes = []; // device-local list of default/extra grapes you've removed from view
 
 /* ---- 1. AUTH --------------------------------------------------- */
 const gate   = document.getElementById("auth-gate");
@@ -2003,6 +2028,34 @@ async function scanForLookup(file){
   }
 }
 
+// Same result card/history/promote flow as scanForLookup, just fed from
+// typed text instead of a photo — for when there's no label to scan
+// (reading off a restaurant wine list, for instance).
+async function scanForLookupManual(text){
+  const btn = document.getElementById("lookup-manual-btn");
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = "Searching…";
+  try{
+    const { data, error } = await supabase.functions.invoke("scan-label", {
+      body: { textInput: text }
+    });
+    if(error){
+      let msg = error.message;
+      try{ const body = await error.context.json(); if(body?.error) msg = body.error; }catch(_){}
+      toast("Couldn't find it — "+msg);
+      return;
+    }
+    addToLookupHistory(data);
+    renderLookupHistory();
+    renderLookupResult(data);
+  }catch(err){
+    toast("Couldn't find it — "+err.message);
+    console.error(err);
+  }finally{
+    btn.disabled = false; btn.textContent = originalText;
+  }
+}
+
 function lookupPrefill(){
   const d = currentLookup || {};
   return { vintage:d.vintage, name:d.name, producer:d.producer, region:d.region, grape:d.grape, color:d.color, drink_window:d.drink_window, decant_time:d.decant_time };
@@ -2105,10 +2158,21 @@ async function fetchVintageRegion(region){
   return Array.isArray(data?.years) ? data.years : null;
 }
 
+// Cells you already own a matching bottle for (exact region + vintage),
+// so the chart doubles as "what am I sitting on" alongside "what's worth buying".
+function ownedVintageCells(){
+  const owned = new Set();
+  cellarItems.filter(isMyCellar).forEach(i=>{
+    const year = parseInt(i.vintage, 10);
+    if(i.region && Number.isInteger(year)) owned.add(`${i.region.trim()}|${year}`);
+  });
+  return owned;
+}
+
 async function renderVintageChart(){
   const wrap = document.getElementById("vintage-chart-wrap");
   const universe = [...new Set([...MAJOR_REGIONS, ...myRegions(), ...vintageChartExtraRegions])];
-  const regions = universe.filter(r=>!vintageChartHiddenRegions.includes(r));
+  const regions = universe.filter(r=>!vintageChartHiddenRegions.includes(r)).sort((a,b)=>a.localeCompare(b));
   document.getElementById("vintage-empty").classList.toggle("hidden", regions.length>0);
   if(!regions.length){ wrap.innerHTML = ""; return; }
 
@@ -2120,22 +2184,27 @@ async function renderVintageChart(){
   }
 
   const years = vintageYearRange();
+  const owned = ownedVintageCells();
   const rows = regions.filter(r=>vintageRatings[r]).map(region=>{
     const byYear = {};
     vintageRatings[region].forEach(y=>{ byYear[y.year] = y; });
     const cells = years.map(y=>{
       const info = byYear[y];
-      const style = (info && info.rating) ? ` style="background:${VINTAGE_COLORS[info.rating-1] || "var(--line)"};"` : "";
-      const label = info && info.rating
-        ? `${y} — ${VINTAGE_LABELS[info.rating-1] || ""}${info.note ? ": "+info.note : ""} (click for wines to source)`
-        : `${y} — click for wines to source`;
+      const isOwned = owned.has(`${region}|${y}`);
+      const bg = (info && info.rating) ? `background:${VINTAGE_COLORS[info.rating-1] || "var(--line)"};` : "";
+      const border = isOwned ? `box-shadow:inset 0 0 0 2px var(--ink);` : "";
+      const style = (bg||border) ? ` style="${bg}${border}"` : "";
+      const label = (info && info.rating
+        ? `${y} — ${VINTAGE_LABELS[info.rating-1] || ""}${info.note ? ": "+info.note : ""}`
+        : `${y}`) + (isOwned ? " — in your cellar" : "") + " (click for wines to source)";
       return `<td class="vintage-cell"${style} title="${esc(label)}" data-vintage-cell-region="${esc(region)}" data-vintage-cell-year="${y}"></td>`;
     }).join("");
     return `<tr><th class="vintage-region-cell">${esc(region)}<button type="button" class="icon-btn vintage-remove-btn" data-vintage-remove="${esc(region)}" title="Remove from chart">×</button></th>${cells}</tr>`;
   }).join("");
 
   const head = `<th class="vintage-region-cell"></th>` + years.map(y=>`<th class="vintage-year-head">${String(y).slice(2)}</th>`).join("");
-  const legend = VINTAGE_LABELS.map((l,i)=>`<span><span class="vintage-swatch" style="background:${VINTAGE_COLORS[i]};"></span>${esc(l)}</span>`).join("");
+  const legend = VINTAGE_LABELS.map((l,i)=>`<span><span class="vintage-swatch" style="background:${VINTAGE_COLORS[i]};"></span>${esc(l)}</span>`).join("")
+    + `<span><span class="vintage-swatch" style="background:var(--line); box-shadow:inset 0 0 0 2px var(--ink);"></span>In your cellar</span>`;
 
   wrap.innerHTML = rows
     ? `<table class="vintage-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table><div class="vintage-legend">${legend}</div>`
@@ -2192,6 +2261,105 @@ async function openVintageCellPanel(region, year){
     console.error(err);
     resultsEl.innerHTML = `<p class="producer">Couldn't find wines — ${esc(err.message)}</p>`;
   }
+}
+
+/* ---- 10d. GRAPE GUIDE ----------------------------------------------
+   A reference profile per grape variety — backed by the shared
+   grape_profiles cache table (see grape-profile Edge Function), so any
+   given grape is only ever generated once, for everyone. Same curated-
+   default-plus-add/remove pattern as the vintage chart's region list. */
+const MAJOR_GRAPES = [
+  "Cabernet Sauvignon", "Merlot", "Cabernet Franc", "Pinot Noir", "Syrah/Shiraz",
+  "Malbec", "Sangiovese", "Nebbiolo", "Tempranillo", "Grenache", "Zinfandel", "Gamay",
+  "Chardonnay", "Sauvignon Blanc", "Riesling", "Chenin Blanc", "Viognier", "Pinot Grigio/Gris",
+];
+
+function loadGrapeGuideList(){
+  try{
+    const raw = localStorage.getItem(GRAPE_GUIDE_KEY);
+    grapeGuideExtraGrapes = raw ? JSON.parse(raw) : [];
+  }catch(err){
+    console.error(err);
+    grapeGuideExtraGrapes = [];
+  }
+  try{
+    const raw = localStorage.getItem(GRAPE_GUIDE_HIDDEN_KEY);
+    grapeGuideHiddenGrapes = raw ? JSON.parse(raw) : [];
+  }catch(err){
+    console.error(err);
+    grapeGuideHiddenGrapes = [];
+  }
+}
+function saveGrapeGuideExtra(){
+  localStorage.setItem(GRAPE_GUIDE_KEY, JSON.stringify(grapeGuideExtraGrapes));
+}
+function saveGrapeGuideHidden(){
+  localStorage.setItem(GRAPE_GUIDE_HIDDEN_KEY, JSON.stringify(grapeGuideHiddenGrapes));
+}
+
+async function fetchGrapeProfile(grape){
+  const { data, error } = await supabase.functions.invoke("grape-profile", { body: { grape } });
+  if(error){
+    let msg = error.message;
+    try{ const errBody = await error.context.json(); if(errBody?.error) msg = errBody.error; }catch(_){}
+    console.error("grape-profile error", msg);
+    return null;
+  }
+  return data?.profile || null;
+}
+
+function grapeCardHTML(grape, p){
+  const notesDD = [
+    p.nose ? `<dt>Nose</dt><dd>${esc(p.nose)}</dd>` : "",
+    p.palate ? `<dt>Palate</dt><dd>${esc(p.palate)}</dd>` : "",
+    p.best_regions ? `<dt>Best regions</dt><dd>${esc(p.best_regions)}</dd>` : "",
+    p.notable_vintages ? `<dt>Notable vintages</dt><dd>${esc(p.notable_vintages)}</dd>` : "",
+  ].join("");
+  return `<article class="card">
+    <div class="body">
+      <div class="vintage-name" style="justify-content:space-between; width:100%;">
+        <h3 class="wine-name">${esc(grape)}</h3>
+        <button type="button" class="icon-btn vintage-remove-btn" data-grape-remove="${esc(grape)}" title="Remove from guide">×</button>
+      </div>
+      ${p.description ? `<p class="producer">${esc(p.description)}</p>` : ""}
+      ${structureStrip(p)}
+      ${notesDD ? `<dl class="notes-block">${notesDD}</dl>` : ""}
+    </div>
+  </article>`;
+}
+
+async function renderGrapeGuide(){
+  const wrap = document.getElementById("grape-cards-wrap");
+  const universe = [...new Set([...MAJOR_GRAPES, ...grapeGuideExtraGrapes])];
+  const grapes = universe.filter(g=>!grapeGuideHiddenGrapes.includes(g)).sort((a,b)=>a.localeCompare(b));
+  document.getElementById("grapes-empty").classList.toggle("hidden", grapes.length>0);
+  if(!grapes.length){ wrap.innerHTML = ""; return; }
+
+  wrap.innerHTML = `<p class="producer">Loading…</p>`;
+  const missing = grapes.filter(g=>!grapeProfiles[g]);
+  if(missing.length){
+    const results = await Promise.all(missing.map(fetchGrapeProfile));
+    missing.forEach((g,i)=>{ if(results[i]) grapeProfiles[g] = results[i]; });
+  }
+
+  const cards = grapes.filter(g=>grapeProfiles[g]).map(g=>grapeCardHTML(g, grapeProfiles[g])).join("");
+  wrap.innerHTML = cards
+    ? `<div class="cards">${cards}</div>`
+    : `<p class="producer">Couldn't load any grapes — try again.</p>`;
+
+  wrap.querySelectorAll("[data-grape-remove]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const grape = btn.dataset.grapeRemove;
+      if(grapeGuideExtraGrapes.includes(grape)){
+        grapeGuideExtraGrapes = grapeGuideExtraGrapes.filter(g=>g!==grape);
+        saveGrapeGuideExtra();
+      }else{
+        grapeGuideHiddenGrapes.push(grape);
+        saveGrapeGuideHidden();
+      }
+      renderGrapeGuide();
+    };
+  });
 }
 
 /* ---- 11. WIRE UP & START ---------------------------------------- */
@@ -2278,6 +2446,14 @@ document.getElementById("connections-refresh-btn").onclick = async ()=>{
 };
 document.getElementById("invite-btn").onclick = inviteFriend;
 document.getElementById("lookup-scan-btn").onclick = ()=> document.getElementById("lookup-photo").click();
+document.getElementById("lookup-manual-form").addEventListener("submit", ev=>{
+  ev.preventDefault();
+  const input = document.getElementById("lookup-manual-input");
+  const text = input.value.trim();
+  if(!text) return;
+  scanForLookupManual(text);
+  input.value = "";
+});
 document.getElementById("header-scan-btn").onclick = ()=>{
   switchView("lookup");
   document.getElementById("lookup-photo").click();
@@ -2323,6 +2499,21 @@ document.getElementById("vintage-add-form").addEventListener("submit", ev=>{
 document.getElementById("vintage-cell-close-btn").onclick = ()=>{
   document.getElementById("vintage-cell-panel").classList.add("hidden");
 };
+loadGrapeGuideList();
+document.getElementById("grape-add-form").addEventListener("submit", ev=>{
+  ev.preventDefault();
+  const input = document.getElementById("grape-add-input");
+  const grape = input.value.trim();
+  if(!grape) return;
+  if(!grapeGuideExtraGrapes.includes(grape)) grapeGuideExtraGrapes.push(grape);
+  saveGrapeGuideExtra();
+  if(grapeGuideHiddenGrapes.includes(grape)){
+    grapeGuideHiddenGrapes = grapeGuideHiddenGrapes.filter(g=>g!==grape);
+    saveGrapeGuideHidden();
+  }
+  input.value = "";
+  renderGrapeGuide();
+});
 function switchView(view){
   document.querySelectorAll(".view-tab").forEach(b=>b.classList.toggle("active", b.dataset.view===view));
   document.getElementById("view-log").classList.toggle("hidden", view!=="log");
@@ -2331,10 +2522,12 @@ function switchView(view){
   document.getElementById("view-stats").classList.toggle("hidden", view!=="stats");
   document.getElementById("view-lookup").classList.toggle("hidden", view!=="lookup");
   document.getElementById("view-vintage").classList.toggle("hidden", view!=="vintage");
+  document.getElementById("view-grapes").classList.toggle("hidden", view!=="grapes");
   if(view==="stats") renderStats();
   if(view==="shared"){ renderConnections(); renderSharedGroups(); }
   if(view==="lookup") renderLookupHistory();
   if(view==="vintage") renderVintageChart();
+  if(view==="grapes") renderGrapeGuide();
 }
 document.querySelectorAll(".view-tab").forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 

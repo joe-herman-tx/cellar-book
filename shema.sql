@@ -691,3 +691,39 @@ create policy "insert any authenticated" on public.vintage_ratings
 drop policy if exists "update any authenticated" on public.vintage_ratings;
 create policy "update any authenticated" on public.vintage_ratings
   for update using ( auth.uid() is not null );
+
+-- ============================================================
+--  19. GRAPE CATALOGUE — same shared-cache pattern as vintage_ratings:
+--      a grape's profile (body/tannin/acidity/finish, nose/palate, best
+--      regions, notable vintages) is general reference knowledge, not
+--      personal data, so once anyone generates a grape it's cached
+--      forever for everyone. Written by the grape-profile Edge Function
+--      using the caller's own session — insert/update open to any
+--      authenticated user, guardrail lives in the Edge Function itself.
+-- ============================================================
+create table if not exists public.grape_profiles (
+  grape            text primary key,
+  description      text,
+  body             smallint check (body between 1 and 5),
+  tannin           smallint check (tannin between 1 and 5),
+  acidity          smallint check (acidity between 1 and 5),
+  finish           smallint check (finish between 1 and 5),
+  nose             text,
+  palate           text,
+  best_regions     text,
+  notable_vintages text,
+  generated_at     timestamptz not null default now()
+);
+alter table public.grape_profiles enable row level security;
+
+drop policy if exists "select any authenticated" on public.grape_profiles;
+create policy "select any authenticated" on public.grape_profiles
+  for select using ( auth.uid() is not null );
+
+drop policy if exists "insert any authenticated" on public.grape_profiles;
+create policy "insert any authenticated" on public.grape_profiles
+  for insert with check ( auth.uid() is not null );
+
+drop policy if exists "update any authenticated" on public.grape_profiles;
+create policy "update any authenticated" on public.grape_profiles
+  for update using ( auth.uid() is not null );
