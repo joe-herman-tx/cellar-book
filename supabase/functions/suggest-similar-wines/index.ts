@@ -76,9 +76,10 @@ Deno.serve(async (req) => {
                 producer: { type: "string" },
                 region: { type: "string" },
                 vintage: { type: ["string", "null"], description: "A specific vintage year to look for if you have a good one in mind, else null for a non-vintage-specific suggestion." },
+                price: { type: ["string", "null"], description: "Estimated retail price, e.g. '$40-60' or '$45', based on general market knowledge. Null if you don't have a reasonable basis to estimate." },
                 reason: { type: "string", description: "One short sentence on why it's similar." },
               },
-              required: ["name", "producer", "region", "vintage", "reason"],
+              required: ["name", "producer", "region", "vintage", "price", "reason"],
             },
           },
         },
@@ -104,7 +105,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: ANTHROPIC_MODEL,
         max_tokens: 1024,
-        system: "You're a knowledgeable wine recommender. Given a wine's details, suggest 3-5 genuinely comparable bottles based on style, region, grape, and quality tier — general similarity, not personalized to any individual's taste. Real, findable wines only, no invented producers. Keep each reason to one short sentence so you stay well within your output budget. Call the record_suggestions tool exactly once.",
+        system: "You're a knowledgeable wine recommender. Given a wine's details, suggest 3-5 genuinely comparable bottles based on style, region, grape, and quality tier — general similarity, not personalized to any individual's taste. Real, findable wines only, no invented producers. Include a rough estimated retail price for each based on general market knowledge — null if you don't have a reasonable basis. Keep each reason to one short sentence so you stay well within your output budget. Call the record_suggestions tool exactly once.",
         tools: [tool],
         tool_choice: { type: "tool", name: "record_suggestions" },
         messages: [{

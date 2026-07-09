@@ -1649,7 +1649,7 @@ function similarWinesHTML(list){
   return list.map(s=>`
     <div class="similar-wine">
       <div class="sw-name">${esc(s.name)}${s.vintage?` <span class="vintage">${esc(s.vintage)}</span>`:""}</div>
-      <div class="sw-meta">${esc([s.producer, s.region].filter(Boolean).join(" · "))}</div>
+      <div class="sw-meta">${esc([s.producer, s.region, s.price].filter(Boolean).join(" · "))}</div>
       <div class="sw-reason">${esc(s.reason)}</div>
     </div>`).join("");
 }
@@ -1695,6 +1695,15 @@ function updateSimilarWinesButton(){
   document.getElementById("similar-wines-btn").disabled = !document.getElementById("c-name").value.trim();
 }
 
+// Defaults a price field to a leading "$" once you've typed something
+// and moved on, without forcing one on an empty field or doubling up
+// if you already typed your own "$".
+function formatPriceField(id){
+  const el = document.getElementById(id);
+  const v = el.value.trim();
+  if(v && !v.startsWith("$")) el.value = "$"+v;
+}
+
 /* ---- 11. WIRE UP & START ---------------------------------------- */
 ["f-body","f-tannin","f-acidity","f-finish"].forEach(id=>{ document.getElementById(id).innerHTML = gaugeOptions; });
 document.getElementById("new-btn").onclick    = ()=>openForm(null);
@@ -1705,6 +1714,8 @@ document.getElementById("sort").onchange      = render;
 document.getElementById("filter-grape").onchange  = render;
 document.getElementById("filter-region").onchange = render;
 document.getElementById("filter-vintage").onchange = render;
+document.getElementById("f-price").onblur = ()=>formatPriceField("f-price");
+document.getElementById("c-price").onblur = ()=>formatPriceField("c-price");
 document.getElementById("f-photo").onchange = ev=>{
   const file = ev.target.files[0];
   if(!file) return;
