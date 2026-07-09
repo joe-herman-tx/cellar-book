@@ -56,6 +56,7 @@
   .signout:hover{ color:var(--oxblood); }
   .masthead .meta{ display:flex; gap:18px; flex-wrap:wrap; align-items:baseline; margin-top:10px; color:var(--ink-soft); font-size:13px; }
   .masthead .meta b{ color:var(--ink); font-family:"Space Mono",monospace; }
+  .header-scan-btn{ margin-left:auto; padding:6px 14px; font-size:12px; }
 
   /* ---------- View tabs ---------- */
   .view-tabs{ display:flex; border-bottom:1px solid var(--line); margin-top:18px; }
@@ -229,6 +230,7 @@
       <span><b id="stat-count">0</b> wines logged</span>
       <span>Avg score <b id="stat-avg">—</b></span>
       <span>Top <b id="stat-top">—</b></span>
+      <button type="button" class="btn ghost header-scan-btn" id="header-scan-btn">Scan a label</button>
     </div>
   </header>
 
@@ -237,7 +239,7 @@
     <button class="view-tab" data-view="cellar">Cellar</button>
     <button class="view-tab" data-view="shared">Shared</button>
     <button class="view-tab" data-view="stats">Stats</button>
-    <button class="view-tab" data-view="lookup">Lookup</button>
+    <button class="view-tab" data-view="lookup">Recent Searches</button>
   </nav>
 
   <section id="view-log">
@@ -1966,6 +1968,10 @@ document.getElementById("connections-refresh-btn").onclick = async ()=>{
 };
 document.getElementById("invite-btn").onclick = inviteFriend;
 document.getElementById("lookup-scan-btn").onclick = ()=> document.getElementById("lookup-photo").click();
+document.getElementById("header-scan-btn").onclick = ()=>{
+  switchView("lookup");
+  document.getElementById("lookup-photo").click();
+};
 document.getElementById("lookup-photo").onchange = ev=>{
   const file = ev.target.files[0];
   if(!file) return;
