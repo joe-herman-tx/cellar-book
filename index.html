@@ -408,10 +408,14 @@
 
   <section id="view-shared" class="hidden">
     <section class="panel">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
         <h2>Connect with someone</h2>
-        <button type="button" class="btn ghost" id="connections-refresh-btn">Refresh</button>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn primary" id="invite-btn">Invite someone</button>
+          <button type="button" class="btn ghost" id="connections-refresh-btn">Refresh</button>
+        </div>
       </div>
+      <p style="font-size:13px; color:var(--ink-soft); margin:8px 0 0;">Not on here yet? Send them an invite — once they sign up, come back here and connect with their email.</p>
       <form class="connect-form" id="connect-form">
         <div>
           <label for="connect-email">Their email</label>
@@ -1693,6 +1697,31 @@ function formatPriceField(id){
   if(v && !v.startsWith("$")) el.value = "$"+v;
 }
 
+// Native share sheet (Messages/Mail/whatever's installed) where supported,
+// clipboard copy as the fallback for browsers without navigator.share
+// (most desktop browsers). NOTE: update "Cellar Book" here to "Vines"
+// once the rebrand lands.
+async function inviteFriend(){
+  const url = window.location.origin + window.location.pathname;
+  const myEmail = document.getElementById("user-email").textContent.trim();
+  const text = `Come join me on Cellar Book, my wine tasting + cellar tracking app! Once you've signed up, head to the Shared tab and search for my email (${myEmail}) to connect.`;
+  if(navigator.share){
+    try{
+      await navigator.share({ title: "Cellar Book", text, url });
+    }catch(err){
+      if(err.name !== "AbortError"){ console.error(err); toast("Couldn't open the share sheet."); }
+    }
+    return;
+  }
+  try{
+    await navigator.clipboard.writeText(`${text} ${url}`);
+    toast("Invite copied — paste it into a text, email, wherever.");
+  }catch(err){
+    console.error(err);
+    toast("Couldn't copy automatically — here's the link: "+url);
+  }
+}
+
 /* ---- 11. WIRE UP & START ---------------------------------------- */
 ["f-body","f-tannin","f-acidity","f-finish"].forEach(id=>{ document.getElementById(id).innerHTML = gaugeOptions; });
 document.getElementById("new-btn").onclick    = ()=>openForm(null);
@@ -1774,6 +1803,7 @@ document.getElementById("connections-refresh-btn").onclick = async ()=>{
   await Promise.all([loadConnectionsData(), loadEntries(), loadCellar(), loadHousehold(), loadHouseholdRequests()]);
   renderConnections(); renderCellar(); renderSharedGroups();
 };
+document.getElementById("invite-btn").onclick = inviteFriend;
 function switchView(view){
   document.querySelectorAll(".view-tab").forEach(b=>b.classList.toggle("active", b.dataset.view===view));
   document.getElementById("view-log").classList.toggle("hidden", view!=="log");
