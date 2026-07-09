@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
       },
     };
 
-    const webSearchTool = { type: "web_search_20260209", name: "web_search", max_uses: 4 };
+    const webSearchTool = { type: "web_search_20260209", name: "web_search", max_uses: 3 };
 
     // tool_choice is deliberately NOT forced here (unlike scan-label /
     // suggest-similar-wines) — forcing record_critic_ratings would make
@@ -103,13 +103,17 @@ Deno.serve(async (req) => {
     // search. Auto lets it run web_search first and call the recording
     // tool once it's done, all within this one request.
     //
-    // max_uses is capped at 4 (not one search per critic) and the system
-    // prompt explicitly pushes toward broader, combined queries — each
-    // web_search round trip adds real latency inside this one request,
-    // and letting Claude fire off up to 8 sequential searches risked
-    // outrunning the Edge Function's execution timeout, which surfaces
-    // to the browser as a generic "Failed to send a request" network
-    // error rather than a clean error response.
+    // The real latency driver isn't search COUNT, it's SEQUENTIAL turns:
+    // each time Claude searches, waits for results, then decides to
+    // search again, that's a full extra model round trip. The system
+    // prompt below explicitly pushes Claude to issue all its searches
+    // together as parallel tool calls in one turn (executed concurrently
+    // server-side by Anthropic) instead of one-at-a-time — that's what
+    // actually bounds this to ~2 model turns instead of up to `max_uses`
+    // sequential ones. max_uses is now just a hard ceiling. An unbounded/
+    // sequential search chain risked outrunning the Edge Function's
+    // execution timeout, surfacing to the browser as a generic failure
+    // or non-2xx status instead of a clean error response.
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -119,8 +123,8 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: ANTHROPIC_MODEL,
-        max_tokens: 1500,
-        system: `You look up published critic ratings for wines. For each of these five critics — ${CRITICS.join(", ")} — try to find a specific, attributable score for the given wine and vintage. Search efficiently: combine critics into broader queries where you can (e.g. one search for "<wine> <vintage> Wine Advocate Vinous score") rather than one search per critic — aim for 2-4 searches total, not five. Only fill in a score if a search result actually surfaced one for this specific wine/vintage — never estimate, guess, or state a score from general reputation or memory. If a critic's rating can't be confidently pinned down once you've searched enough, leave both score and source_note null for that critic rather than searching indefinitely. Call record_critic_ratings exactly once with your findings, always including all five critics in the given order.`,
+        max_tokens: 1800,
+        system: `You look up published critic ratings for wines. For each of these five critics — ${CRITICS.join(", ")} — try to find a specific, attributable score for the given wine and vintage. Speed matters: decide your 2-3 search queries up front (combine critics into broader queries where you can, e.g. one search for "<wine> <vintage> Wine Advocate Vinous score") and issue them as PARALLEL tool calls in a single turn — do not search once, read results, then decide to search again. Only fill in a score if a search result actually surfaced one for this specific wine/vintage — never estimate, guess, or state a score from general reputation or memory. If a critic's rating can't be pinned down from that first batch of searches, leave both score and source_note null for that critic rather than searching again. As soon as your parallel searches come back, call record_critic_ratings immediately with your findings, always including all five critics in the given order.`,
         tools: [webSearchTool, recordTool],
         messages: [{
           role: "user",

@@ -88,18 +88,23 @@ Deno.serve(async (req) => {
       },
     };
 
-    const webSearchTool = { type: "web_search_20260209", name: "web_search", max_uses: 4 };
+    const webSearchTool = { type: "web_search_20260209", name: "web_search", max_uses: 3 };
 
     // tool_choice deliberately not forced — same reasoning as
     // lookup-critic-ratings: Claude needs room to search first.
     //
-    // max_uses is capped at 4 and the system prompt pushes toward a
-    // couple of broad queries instead of one search per wine — each
-    // web_search round trip adds real latency inside this one request,
-    // and an unbounded search count risked outrunning the Edge
-    // Function's execution timeout, which surfaces to the browser as a
-    // generic "Failed to send a request" network error instead of a
-    // clean error response.
+    // The real latency driver isn't search COUNT, it's SEQUENTIAL turns:
+    // each time Claude searches, waits for results, then decides to
+    // search again, that's a full extra model round trip. The system
+    // prompt below explicitly pushes Claude to issue all its searches
+    // together as parallel tool calls in one turn (which Anthropic
+    // executes concurrently server-side) instead of one-at-a-time —
+    // that's what actually bounds the request to ~2 model turns instead
+    // of up to `max_uses` sequential ones. max_uses is now just a hard
+    // ceiling, not the primary lever. An unbounded/sequential search
+    // chain risked outrunning the Edge Function's execution timeout,
+    // which surfaces to the browser as a generic failure or non-2xx
+    // status instead of a clean error response.
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -109,8 +114,8 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: ANTHROPIC_MODEL,
-        max_tokens: 1500,
-        system: "You help someone source real wine to buy. Given a wine region and a specific vintage year, use the web_search tool to find 3-5 real, currently findable wines from that exact region and vintage, spanning a range of price points from budget to splurge. Search efficiently — 2-3 broad searches is enough (e.g. one for budget-to-mid options, one for splurge/top options), not one search per wine. Real producers only — never invent a wine. Include a rating only if a search result actually surfaced an attributable score for that wine (with its source where possible) — never estimate or guess one. Write a short 1-2 sentence description of each wine based on what you found. Once you have enough for 3-5 solid entries, call record_vintage_wines immediately — don't keep searching for a perfect match on every field.",
+        max_tokens: 1800,
+        system: "You help someone source real wine to buy. Given a wine region and a specific vintage year, use the web_search tool to find 3-5 real, currently findable wines from that exact region and vintage, spanning a range of price points from budget to splurge. Speed matters: issue your searches (2-3 of them, covering different price tiers) as PARALLEL tool calls in a single turn — do not search once, read the results, and then decide to search again; decide all your queries up front and fire them together. Real producers only — never invent a wine. Include a rating only if a search result actually surfaced an attributable score for that wine (with its source where possible) — never estimate or guess one. Write a short 1-2 sentence description of each wine based on what you found. As soon as your parallel searches come back, call record_vintage_wines immediately with your best 3-5 entries — do not search again after that first batch.",
         tools: [webSearchTool, recordTool],
         messages: [{
           role: "user",
