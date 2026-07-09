@@ -802,7 +802,7 @@ function currentView(base){
   const regionFilter = document.getElementById("filter-region").value;
   const vintageFilter = document.getElementById("filter-vintage").value;
   let list = base.filter(e=>{
-    if(grapeFilter && e.grape !== grapeFilter) return false;
+    if(grapeFilter && !parseGrapes(e.grape).includes(grapeFilter)) return false;
     if(regionFilter && e.region !== regionFilter) return false;
     if(vintageFilter && e.vintage !== vintageFilter) return false;
     if(!q) return true;
@@ -850,7 +850,7 @@ function render(){
   // Tasting Log tab is owned-tastings-only now — shared-in tastings
   // live in the Shared tab instead (see renderSharedGroups()).
   const mine = entries.filter(e=>e.user_id===currentUserId);
-  populateFilterSelect("filter-grape", mine.map(e=>e.grape));
+  populateFilterSelect("filter-grape", mine.flatMap(e=>parseGrapes(e.grape)));
   populateFilterSelect("filter-region", mine.map(e=>e.region));
   populateFilterSelect("filter-vintage", mine.map(e=>e.vintage));
   const list = currentView(mine);
@@ -1091,6 +1091,19 @@ function cellarCardHTML(item){
   </article>`;
 }
 
+// Splits a grape field into individual grape names for filtering/grouping,
+// regardless of whether it was typed by hand or filled in by the label
+// scan — strips percentages ("82% Merlot" -> "Merlot") and splits blends
+// on commas/slashes/"&"/"and" ("Merlot / Cabernet Sauvignon" -> both).
+function parseGrapes(str){
+  if(!str) return [];
+  return str
+    .replace(/\d+(\.\d+)?\s*%/g, "")
+    .split(/[,/&]|\band\b/i)
+    .map(s=>s.trim())
+    .filter(Boolean);
+}
+
 // Rebuilds a filter <select>'s options from the values actually present
 // in the cellar, preserving the current selection if it's still valid.
 function populateFilterSelect(id, values){
@@ -1119,7 +1132,7 @@ function renderCellar(){
 
   populateFilterSelect("cellar-filter-color", mine.map(i=>i.color));
   populateFilterSelect("cellar-filter-region", mine.map(i=>i.region));
-  populateFilterSelect("cellar-filter-grape", mine.map(i=>i.grape));
+  populateFilterSelect("cellar-filter-grape", mine.flatMap(i=>parseGrapes(i.grape)));
 
   const q = document.getElementById("cellar-search").value.trim().toLowerCase();
   const colorFilter = document.getElementById("cellar-filter-color").value;
@@ -1131,7 +1144,7 @@ function renderCellar(){
   const filtered = mine.filter(item=>{
     if(colorFilter && item.color !== colorFilter) return false;
     if(regionFilter && item.region !== regionFilter) return false;
-    if(grapeFilter && item.grape !== grapeFilter) return false;
+    if(grapeFilter && !parseGrapes(item.grape).includes(grapeFilter)) return false;
     if(q){
       const hay = [item.name,item.producer,item.region,item.grape,item.notes].filter(Boolean).join(" ").toLowerCase();
       if(!hay.includes(q)) return false;
