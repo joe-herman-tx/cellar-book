@@ -114,7 +114,8 @@
   .vintage-region-cell{ text-align:left; padding:6px 12px 6px 0 !important; font-size:13px; font-weight:600; white-space:nowrap; position:sticky; left:0; background:var(--paper-2); }
   .vintage-remove-btn{ font-size:14px; padding:0 0 0 6px; line-height:1; }
   .vintage-year-head{ font-size:9px; color:var(--ink-soft); font-weight:600; text-align:center; padding-bottom:4px !important; }
-  .vintage-cell{ width:22px; height:22px; border:1px solid var(--paper-2); }
+  .vintage-cell{ width:22px; height:22px; border:1px solid var(--paper-2); background:var(--line); cursor:pointer; }
+  .vintage-cell:hover{ outline:2px solid var(--ink); outline-offset:-2px; }
   .vintage-legend{ display:flex; gap:14px; flex-wrap:wrap; margin-top:14px; font-size:12px; color:var(--ink-soft); }
   .vintage-swatch{ display:inline-block; width:12px; height:12px; border-radius:2px; margin-right:5px; vertical-align:middle; }
 
@@ -538,9 +539,17 @@
           <button type="submit" class="btn ghost">Add</button>
         </form>
       </div>
-      <p style="font-size:13px; color:var(--ink-soft); margin:8px 0 0;">A general guide to how good each vintage was for a region — starts with regions from your own tastings and cellar. Add any other region you're curious about.</p>
+      <p style="font-size:13px; color:var(--ink-soft); margin:8px 0 0;">A general guide to how good each vintage was — starts with major world regions plus anything from your own tastings and cellar. Click any cell to see real wines to source at that region and vintage. Add any other region you're curious about, or remove a row you don't need.</p>
       <div id="vintage-chart-wrap" style="margin-top:16px; overflow-x:auto;"></div>
-      <p class="producer hidden" id="vintage-empty">No regions yet — log a few wines with a region, or add one above.</p>
+      <p class="producer hidden" id="vintage-empty">No regions yet — add one above.</p>
+    </section>
+
+    <section class="panel hidden" id="vintage-cell-panel">
+      <div style="display:flex; justify-content:space-between; align-items:baseline;">
+        <h2 id="vintage-cell-title">—</h2>
+        <button type="button" class="icon-btn" id="vintage-cell-close-btn">Close</button>
+      </div>
+      <div id="vintage-cell-results"></div>
     </section>
   </section>
 
@@ -604,8 +613,10 @@ const LOOKUP_HISTORY_KEY = "cellarbook.recentLookups";
 let recentLookups = [];       // device-local scan history, not synced — see loadLookupHistory()
 let currentLookup = null;     // the lookup result currently shown, for the promote buttons
 const VINTAGE_CHART_REGIONS_KEY = "vines.vintageChartRegions";
+const VINTAGE_CHART_HIDDEN_KEY = "vines.vintageChartHiddenRegions";
 let vintageRatings = {};              // { [region]: [{year,rating,note}, ...] } — in-memory cache for this session
 let vintageChartExtraRegions = [];    // device-local list of manually-added regions — see loadVintageChartRegions()
+let vintageChartHiddenRegions = [];   // device-local list of default/extra regions you've removed from view
 
 /* ---- 1. AUTH --------------------------------------------------- */
 const gate   = document.getElementById("auth-gate");
@@ -2030,11 +2041,21 @@ async function lookupCriticRatingsForCurrent(){
    Regions x years, shaded by how good each vintage generally was —
    backed by the shared vintage_ratings cache table (see vintage-chart
    Edge Function), so any given region is only ever generated once,
-   for everyone. Starts with regions pulled from your own tastings/
-   cellar; you can add any other region via the text input, tracked
-   locally so it doesn't need its own per-user table. */
+   for everyone. Starts with a curated list of major world regions PLUS
+   regions pulled from your own tastings/cellar, so it's useful before
+   you've logged anything; add any other region via the text input,
+   remove any row (default or added) via its ×. Both lists are tracked
+   locally, not in a per-user table. */
 const VINTAGE_LABELS = ["Fair", "Good", "Very Good", "Excellent", "Outstanding"]; // index = rating-1
 const VINTAGE_COLORS = ["#8A2130", "#B5652A", "#9C7A2E", "#6B7B3E", "#3F6B4A"];   // index = rating-1
+const MAJOR_REGIONS = [
+  "Bordeaux, France", "Burgundy, France", "Champagne, France", "Rhône Valley, France",
+  "Napa Valley, USA", "Sonoma County, USA", "Willamette Valley, USA",
+  "Tuscany, Italy", "Piedmont, Italy", "Veneto, Italy",
+  "Rioja, Spain", "Ribera del Duero, Spain", "Priorat, Spain",
+  "Douro Valley, Portugal", "Mosel, Germany",
+  "Barossa Valley, Australia", "Marlborough, New Zealand", "Mendoza, Argentina",
+];
 
 function vintageYearRange(){
   const y = new Date().getFullYear();
@@ -2058,9 +2079,19 @@ function loadVintageChartRegions(){
     console.error(err);
     vintageChartExtraRegions = [];
   }
+  try{
+    const raw = localStorage.getItem(VINTAGE_CHART_HIDDEN_KEY);
+    vintageChartHiddenRegions = raw ? JSON.parse(raw) : [];
+  }catch(err){
+    console.error(err);
+    vintageChartHiddenRegions = [];
+  }
 }
 function saveVintageChartRegions(){
   localStorage.setItem(VINTAGE_CHART_REGIONS_KEY, JSON.stringify(vintageChartExtraRegions));
+}
+function saveVintageChartHidden(){
+  localStorage.setItem(VINTAGE_CHART_HIDDEN_KEY, JSON.stringify(vintageChartHiddenRegions));
 }
 
 async function fetchVintageRegion(region){
@@ -2076,7 +2107,8 @@ async function fetchVintageRegion(region){
 
 async function renderVintageChart(){
   const wrap = document.getElementById("vintage-chart-wrap");
-  const regions = [...new Set([...myRegions(), ...vintageChartExtraRegions])];
+  const universe = [...new Set([...MAJOR_REGIONS, ...myRegions(), ...vintageChartExtraRegions])];
+  const regions = universe.filter(r=>!vintageChartHiddenRegions.includes(r));
   document.getElementById("vintage-empty").classList.toggle("hidden", regions.length>0);
   if(!regions.length){ wrap.innerHTML = ""; return; }
 
@@ -2093,15 +2125,13 @@ async function renderVintageChart(){
     vintageRatings[region].forEach(y=>{ byYear[y.year] = y; });
     const cells = years.map(y=>{
       const info = byYear[y];
-      if(!info || !info.rating) return `<td class="vintage-cell" style="background:var(--line);"></td>`;
-      const color = VINTAGE_COLORS[info.rating-1] || "var(--line)";
-      const label = `${y} — ${VINTAGE_LABELS[info.rating-1] || ""}${info.note ? ": "+info.note : ""}`;
-      return `<td class="vintage-cell" style="background:${color};" title="${esc(label)}"></td>`;
+      const style = (info && info.rating) ? ` style="background:${VINTAGE_COLORS[info.rating-1] || "var(--line)"};"` : "";
+      const label = info && info.rating
+        ? `${y} — ${VINTAGE_LABELS[info.rating-1] || ""}${info.note ? ": "+info.note : ""} (click for wines to source)`
+        : `${y} — click for wines to source`;
+      return `<td class="vintage-cell"${style} title="${esc(label)}" data-vintage-cell-region="${esc(region)}" data-vintage-cell-year="${y}"></td>`;
     }).join("");
-    const removeBtn = vintageChartExtraRegions.includes(region)
-      ? `<button type="button" class="icon-btn vintage-remove-btn" data-vintage-remove="${esc(region)}" title="Remove from chart">×</button>`
-      : "";
-    return `<tr><th class="vintage-region-cell">${esc(region)}${removeBtn}</th>${cells}</tr>`;
+    return `<tr><th class="vintage-region-cell">${esc(region)}<button type="button" class="icon-btn vintage-remove-btn" data-vintage-remove="${esc(region)}" title="Remove from chart">×</button></th>${cells}</tr>`;
   }).join("");
 
   const head = `<th class="vintage-region-cell"></th>` + years.map(y=>`<th class="vintage-year-head">${String(y).slice(2)}</th>`).join("");
@@ -2114,11 +2144,54 @@ async function renderVintageChart(){
   wrap.querySelectorAll("[data-vintage-remove]").forEach(btn=>{
     btn.onclick = ()=>{
       const region = btn.dataset.vintageRemove;
-      vintageChartExtraRegions = vintageChartExtraRegions.filter(r=>r!==region);
-      saveVintageChartRegions();
+      if(vintageChartExtraRegions.includes(region)){
+        vintageChartExtraRegions = vintageChartExtraRegions.filter(r=>r!==region);
+        saveVintageChartRegions();
+      }else{
+        vintageChartHiddenRegions.push(region);
+        saveVintageChartHidden();
+      }
       renderVintageChart();
     };
   });
+  wrap.querySelectorAll("[data-vintage-cell-region]").forEach(cell=>{
+    cell.onclick = ()=> openVintageCellPanel(cell.dataset.vintageCellRegion, Number(cell.dataset.vintageCellYear));
+  });
+}
+
+function vintageWineResultsHTML(wines){
+  return wines.map(w=>`
+    <div class="similar-wine">
+      <div class="sw-name">${esc(w.name)}</div>
+      <div class="sw-meta">${esc([w.producer, w.price, w.rating].filter(Boolean).join(" · "))}</div>
+      <div class="sw-reason">${esc(w.description)}</div>
+    </div>`).join("");
+}
+
+async function openVintageCellPanel(region, year){
+  const panel = document.getElementById("vintage-cell-panel");
+  const titleEl = document.getElementById("vintage-cell-title");
+  const resultsEl = document.getElementById("vintage-cell-results");
+  panel.classList.remove("hidden");
+  titleEl.textContent = `${year} · ${region}`;
+  resultsEl.innerHTML = `<p class="producer">Searching for wines to source…</p>`;
+  panel.scrollIntoView({behavior:"smooth", block:"start"});
+  try{
+    const { data, error } = await supabase.functions.invoke("explore-vintage-cell", { body: { region, year } });
+    if(error){
+      let msg = error.message;
+      try{ const errBody = await error.context.json(); if(errBody?.error) msg = errBody.error; }catch(_){}
+      resultsEl.innerHTML = `<p class="producer">Couldn't find wines — ${esc(msg)}</p>`;
+      return;
+    }
+    const wines = Array.isArray(data?.wines) ? data.wines : [];
+    resultsEl.innerHTML = wines.length
+      ? `<div class="similar-wines">${vintageWineResultsHTML(wines)}</div><p class="critic-ratings-caveat">Best-effort search results — verify pricing/availability before buying.</p>`
+      : `<p class="producer">Couldn't find wines for this cell — try again.</p>`;
+  }catch(err){
+    console.error(err);
+    resultsEl.innerHTML = `<p class="producer">Couldn't find wines — ${esc(err.message)}</p>`;
+  }
 }
 
 /* ---- 11. WIRE UP & START ---------------------------------------- */
@@ -2240,9 +2313,16 @@ document.getElementById("vintage-add-form").addEventListener("submit", ev=>{
   if(!region) return;
   if(!vintageChartExtraRegions.includes(region)) vintageChartExtraRegions.push(region);
   saveVintageChartRegions();
+  if(vintageChartHiddenRegions.includes(region)){
+    vintageChartHiddenRegions = vintageChartHiddenRegions.filter(r=>r!==region);
+    saveVintageChartHidden();
+  }
   input.value = "";
   renderVintageChart();
 });
+document.getElementById("vintage-cell-close-btn").onclick = ()=>{
+  document.getElementById("vintage-cell-panel").classList.add("hidden");
+};
 function switchView(view){
   document.querySelectorAll(".view-tab").forEach(b=>b.classList.toggle("active", b.dataset.view===view));
   document.getElementById("view-log").classList.toggle("hidden", view!=="log");
