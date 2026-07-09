@@ -95,13 +95,21 @@ Deno.serve(async (req) => {
       },
     };
 
-    const webSearchTool = { type: "web_search_20260209", name: "web_search", max_uses: 8 };
+    const webSearchTool = { type: "web_search_20260209", name: "web_search", max_uses: 4 };
 
     // tool_choice is deliberately NOT forced here (unlike scan-label /
     // suggest-similar-wines) — forcing record_critic_ratings would make
     // Claude call it immediately, before it's had a chance to actually
     // search. Auto lets it run web_search first and call the recording
     // tool once it's done, all within this one request.
+    //
+    // max_uses is capped at 4 (not one search per critic) and the system
+    // prompt explicitly pushes toward broader, combined queries — each
+    // web_search round trip adds real latency inside this one request,
+    // and letting Claude fire off up to 8 sequential searches risked
+    // outrunning the Edge Function's execution timeout, which surfaces
+    // to the browser as a generic "Failed to send a request" network
+    // error rather than a clean error response.
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -112,7 +120,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: ANTHROPIC_MODEL,
         max_tokens: 1500,
-        system: `You look up published critic ratings for wines. For each of these five critics — ${CRITICS.join(", ")} — use the web_search tool to try to find a specific, attributable score for the given wine and vintage. Only fill in a score if a search result actually surfaced one for this specific wine/vintage — never estimate, guess, or state a score from general reputation or memory. If a critic's rating can't be confidently pinned down from search results, leave both score and source_note null for that critic rather than guessing. Once you've searched for all five, call record_critic_ratings exactly once with your findings, always including all five critics in the given order.`,
+        system: `You look up published critic ratings for wines. For each of these five critics — ${CRITICS.join(", ")} — try to find a specific, attributable score for the given wine and vintage. Search efficiently: combine critics into broader queries where you can (e.g. one search for "<wine> <vintage> Wine Advocate Vinous score") rather than one search per critic — aim for 2-4 searches total, not five. Only fill in a score if a search result actually surfaced one for this specific wine/vintage — never estimate, guess, or state a score from general reputation or memory. If a critic's rating can't be confidently pinned down once you've searched enough, leave both score and source_note null for that critic rather than searching indefinitely. Call record_critic_ratings exactly once with your findings, always including all five critics in the given order.`,
         tools: [webSearchTool, recordTool],
         messages: [{
           role: "user",

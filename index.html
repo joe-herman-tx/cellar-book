@@ -1983,7 +1983,15 @@ function lookupResultHTML(data){
 
 function renderLookupResult(data){
   currentLookup = data;
-  document.getElementById("lookup-result").innerHTML = lookupResultHTML(data);
+  const isVintage = data.type === "vintage";
+  document.getElementById("lookup-result").innerHTML = isVintage
+    ? `<div class="vintage-name"><h3 class="wine-name">${esc(data.year)} · ${esc(data.region)}</h3></div>
+       <div class="similar-wines">${vintageWineResultsHTML(data.wines)}</div>
+       <p class="critic-ratings-caveat">Best-effort search results, archived from when you looked them up — verify pricing/availability before buying.</p>`
+    : lookupResultHTML(data);
+  document.getElementById("lookup-add-cellar-btn").classList.toggle("hidden", isVintage);
+  document.getElementById("lookup-log-tasting-btn").classList.toggle("hidden", isVintage);
+  document.getElementById("lookup-critic-ratings-btn").classList.toggle("hidden", isVintage);
   document.getElementById("lookup-result-panel").classList.remove("hidden");
   document.getElementById("lookup-critic-ratings-results").innerHTML = "";
   document.getElementById("lookup-result-panel").scrollIntoView({behavior:"smooth", block:"start"});
@@ -2000,8 +2008,8 @@ function renderLookupHistory(){
   empty.classList.add("hidden");
   list.innerHTML = `<div class="lookup-history-list">${recentLookups.map((d,i)=>`
     <button type="button" class="lookup-history-item" data-idx="${i}">
-      <span class="wine-name">${d.vintage ? esc(d.vintage)+" " : ""}${esc(d.name || "Unknown wine")}</span>
-      <span class="producer">${esc(d.producer || "")}</span>
+      <span class="wine-name">${d.type === "vintage" ? `${esc(d.year)} · ${esc(d.region)}` : `${d.vintage ? esc(d.vintage)+" " : ""}${esc(d.name || "Unknown wine")}`}</span>
+      <span class="producer">${d.type === "vintage" ? "Vintage search" : esc(d.producer || "")}</span>
     </button>`).join("")}</div>`;
   list.querySelectorAll(".lookup-history-item").forEach(btn=>{
     btn.onclick = ()=> renderLookupResult(recentLookups[Number(btn.dataset.idx)]);
@@ -2276,6 +2284,10 @@ async function openVintageCellPanel(region, year){
     resultsEl.innerHTML = wines.length
       ? `<div class="similar-wines">${vintageWineResultsHTML(wines)}</div><p class="critic-ratings-caveat">Best-effort search results — verify pricing/availability before buying.</p>`
       : `<p class="producer">Couldn't find wines for this cell — try again.</p>`;
+    if(wines.length){
+      addToLookupHistory({ type: "vintage", region, year, wines });
+      renderLookupHistory();
+    }
   }catch(err){
     console.error(err);
     resultsEl.innerHTML = `<p class="producer">Couldn't find wines — ${esc(err.message)}</p>`;
