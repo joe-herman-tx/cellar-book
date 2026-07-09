@@ -151,7 +151,8 @@
   .notes-block dt{ font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--brass); font-weight:700; margin-top:10px; }
   .notes-block dd{ margin:2px 0 0; font-size:14px; color:var(--ink); }
   .aside{ display:flex; flex-direction:column; align-items:flex-end; gap:14px; min-width:132px; }
-  .card-thumb{ width:96px; height:96px; object-fit:cover; border-radius:var(--radius); border:1px solid var(--line); display:block; }
+  .card-thumb{ width:96px; height:96px; object-fit:cover; border-radius:var(--radius); border:1px solid var(--line); display:block; margin-bottom:10px; }
+  .card-details{ margin-top:10px; }
   .score{ font-family:"Space Mono",monospace; font-weight:700; line-height:.9; font-size:52px; color:var(--oxblood); text-align:right; }
   .score small{ display:block; font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--ink-soft); font-weight:600; margin-top:4px; font-family:"Hanken Grotesk",sans-serif; }
   .score.unscored{ color:var(--line); }
@@ -238,8 +239,22 @@
           <option value="date-asc">Oldest first</option>
           <option value="score-desc">Score, high → low</option>
           <option value="score-asc">Score, low → high</option>
+          <option value="vintage-desc">Vintage, new → old</option>
+          <option value="vintage-asc">Vintage, old → new</option>
           <option value="name-asc">Name, A → Z</option>
         </select>
+      </div>
+      <div class="sortgroup">
+        <label for="filter-grape" style="margin:0;">Grape</label>
+        <select id="filter-grape" aria-label="Filter by grape"><option value="">All</option></select>
+      </div>
+      <div class="sortgroup">
+        <label for="filter-region" style="margin:0;">Region</label>
+        <select id="filter-region" aria-label="Filter by region"><option value="">All</option></select>
+      </div>
+      <div class="sortgroup">
+        <label for="filter-vintage" style="margin:0;">Vintage</label>
+        <select id="filter-vintage" aria-label="Filter by vintage"><option value="">All</option></select>
       </div>
       <button class="btn primary" id="new-btn">+ New tasting</button>
       <button class="btn ghost" id="export-btn">Export CSV</button>
@@ -491,6 +506,7 @@ let cellarExistingImagePath = null;
 let pendingSimilarWines = null; // suggestions for the currently-open cellar form, saved with the bottle
 let commentsByTasting = {};   // { tasting_id: [comment, ...] }
 let openThreads = new Set();  // tasting ids whose comment thread is expanded
+let expandedCards = new Set(); // tasting/cellar ids showing full details instead of the condensed view
 let connections = [];         // [{id, shareCellar}] — people you're connected with
 let incomingRequests = [];    // connection_requests where you're the recipient
 let outgoingRequests = [];    // connection_requests where you're the requester
@@ -527,7 +543,7 @@ function applySession(session){
     currentUserId = null;
     entries = []; cellarItems = []; commentsByTasting = {}; openThreads = new Set();
     connections = []; incomingRequests = []; outgoingRequests = []; householdIds = [];
-    incomingHouseholdRequests = []; outgoingHouseholdRequests = [];
+    incomingHouseholdRequests = []; outgoingHouseholdRequests = []; expandedCards = new Set();
   }
 }
 
@@ -687,22 +703,27 @@ function cardHTML(e, showOwnerTag=true){
   const thumbHTML = e._imgUrl
     ? `<a href="${esc(e._imgUrl)}" target="_blank" rel="noopener"><img class="card-thumb" src="${esc(e._imgUrl)}" alt="Label for ${esc(e.name)}" /></a>`
     : "";
-  const actionsHTML = mine
-    ? `<div class="card-actions">
-        <button class="icon-btn" data-edit="${e.id}">Edit</button>
-        <button class="icon-btn" data-del="${e.id}">Delete</button>
-      </div>`
+  const expanded = expandedCards.has(e.id);
+  const editDelHTML = mine
+    ? `<button class="icon-btn" data-edit="${e.id}">Edit</button><button class="icon-btn" data-del="${e.id}">Delete</button>`
     : "";
   return `<article class="card">
     <div class="body">
+      ${thumbHTML}
       <div class="vintage-name">${e.vintage?`<span class="vintage">${esc(e.vintage)}</span>`:""}<h3 class="wine-name">${esc(e.name)}</h3></div>
       ${e.producer?`<p class="producer">${esc(e.producer)}</p>`:""}
       <div class="tags">${tags}${dateTag}${sharedTag}</div>
-      <dl class="notes-block">${noseDD}${palateDD}${notesDD}</dl>
-      ${actionsHTML}
-      ${commentsHTML(e)}
+      <div class="card-actions">
+        ${editDelHTML}
+        <button class="icon-btn" data-toggle-card="${e.id}">${expanded?"Hide details":"Show details"}</button>
+      </div>
+      <div class="card-details ${expanded?"":"hidden"}">
+        <dl class="notes-block">${noseDD}${palateDD}${notesDD}</dl>
+        ${structureStrip(e)}
+        ${commentsHTML(e)}
+      </div>
     </div>
-    <div class="aside">${thumbHTML}${scoreHTML}${structureStrip(e)}</div>
+    <div class="aside">${scoreHTML}</div>
   </article>`;
 }
 function commentsHTML(e){
@@ -731,7 +752,13 @@ function commentsHTML(e){
 function currentView(base){
   const q = document.getElementById("search").value.trim().toLowerCase();
   const sort = document.getElementById("sort").value;
+  const grapeFilter = document.getElementById("filter-grape").value;
+  const regionFilter = document.getElementById("filter-region").value;
+  const vintageFilter = document.getElementById("filter-vintage").value;
   let list = base.filter(e=>{
+    if(grapeFilter && e.grape !== grapeFilter) return false;
+    if(regionFilter && e.region !== regionFilter) return false;
+    if(vintageFilter && e.vintage !== vintageFilter) return false;
     if(!q) return true;
     return [e.name,e.producer,e.region,e.grape,e.nose,e.palate,e.notes,e.vintage]
       .filter(Boolean).join(" ").toLowerCase().includes(q);
@@ -742,6 +769,8 @@ function currentView(base){
     "date-asc":  (a,b)=> (a.date||"").localeCompare(b.date||"") || a.id.localeCompare(b.id),
     "score-desc":(a,b)=> num(b.score)-num(a.score),
     "score-asc": (a,b)=> num(a.score)-num(b.score),
+    "vintage-desc":(a,b)=> num(b.vintage)-num(a.vintage),
+    "vintage-asc": (a,b)=> num(a.vintage)-num(b.vintage),
     "name-asc":  (a,b)=> (a.name||"").localeCompare(b.name||""),
   }[sort];
   return list.sort(cmp);
@@ -752,6 +781,11 @@ function currentView(base){
 function wireCardEvents(root, rerender){
   root.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openForm(b.dataset.edit));
   root.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>del(b.dataset.del));
+  root.querySelectorAll("[data-toggle-card]").forEach(b=>b.onclick=()=>{
+    const id = b.dataset.toggleCard;
+    expandedCards.has(id) ? expandedCards.delete(id) : expandedCards.add(id);
+    rerender();
+  });
   root.querySelectorAll("[data-toggle-comments]").forEach(b=>b.onclick=()=>{
     const id = b.dataset.toggleComments;
     openThreads.has(id) ? openThreads.delete(id) : openThreads.add(id);
@@ -770,6 +804,9 @@ function render(){
   // Tasting Log tab is owned-tastings-only now — shared-in tastings
   // live in the Shared tab instead (see renderSharedGroups()).
   const mine = entries.filter(e=>e.user_id===currentUserId);
+  populateFilterSelect("filter-grape", mine.map(e=>e.grape));
+  populateFilterSelect("filter-region", mine.map(e=>e.region));
+  populateFilterSelect("filter-vintage", mine.map(e=>e.vintage));
   const list = currentView(mine);
   const cards = document.getElementById("cards");
   cards.innerHTML = list.map(e=>cardHTML(e)).join("");
@@ -986,21 +1023,25 @@ function cellarCardHTML(item){
   const thumbHTML = item._imgUrl
     ? `<a href="${esc(item._imgUrl)}" target="_blank" rel="noopener"><img class="card-thumb" src="${esc(item._imgUrl)}" alt="Label for ${esc(item.name)}" /></a>`
     : "";
+  const expanded = expandedCards.has(item.id);
   return `<article class="card">
     <div class="body">
+      ${thumbHTML}
       <div class="vintage-name">${item.vintage?`<span class="vintage">${esc(item.vintage)}</span>`:""}<h3 class="wine-name">${esc(item.name)}</h3></div>
       ${item.producer?`<p class="producer">${esc(item.producer)}</p>`:""}
       <div class="tags">${tags}${purchasedTag}${addedTag}</div>
-      ${detailsBlock}
-      ${similarBlock}
       <div class="card-actions">
         <button class="icon-btn" data-cellar-log="${item.id}">Log a tasting</button>
         <button class="icon-btn" data-cellar-edit="${item.id}">Edit</button>
         <button class="icon-btn" data-cellar-del="${item.id}">Delete</button>
+        <button class="icon-btn" data-toggle-card="${item.id}">${expanded?"Hide details":"Show details"}</button>
+      </div>
+      <div class="card-details ${expanded?"":"hidden"}">
+        ${detailsBlock}
+        ${similarBlock}
       </div>
     </div>
     <div class="aside">
-      ${thumbHTML}
       <div class="score">${esc(String(item.quantity))}<small>in cellar</small></div>
     </div>
   </article>`;
@@ -1081,6 +1122,11 @@ function renderCellar(){
   cards.querySelectorAll("[data-cellar-edit]").forEach(b=>b.onclick=()=>openCellarForm(b.dataset.cellarEdit));
   cards.querySelectorAll("[data-cellar-del]").forEach(b=>b.onclick=()=>delCellar(b.dataset.cellarDel));
   cards.querySelectorAll("[data-cellar-log]").forEach(b=>b.onclick=()=>logTasting(b.dataset.cellarLog));
+  cards.querySelectorAll("[data-toggle-card]").forEach(b=>b.onclick=()=>{
+    const id = b.dataset.toggleCard;
+    expandedCards.has(id) ? expandedCards.delete(id) : expandedCards.add(id);
+    renderCellar();
+  });
 }
 
 const cellarPanel = document.getElementById("cellar-form-panel");
@@ -1223,13 +1269,29 @@ function scoreTrendSVG(list){
   const scored = list.filter(e=>e.score!==null && e.score!=="" && e.date)
     .slice().sort((a,b)=>(a.date||"").localeCompare(b.date||""));
   if(!scored.length) return `<p class="producer">Log a few scored tastings to see a trend.</p>`;
-  const W=640, H=200, PAD=28;
-  const xStep = scored.length>1 ? (W-PAD*2)/(scored.length-1) : 0;
-  const yFor = s => H-PAD - (Number(s)/100)*(H-PAD*2);
-  const pts = scored.map((e,i)=>`${PAD+i*xStep},${yFor(e.score)}`).join(" ");
-  const dots = scored.map((e,i)=>`<circle cx="${PAD+i*xStep}" cy="${yFor(e.score)}" r="3.5" fill="var(--oxblood)"><title>${esc(e.name)} — ${esc(String(e.score))}</title></circle>`).join("");
+
+  // Auto-scale to the actual score range instead of a fixed 0-100 axis —
+  // otherwise a couple of closely-scored wines all cluster near the top
+  // of the chart and look nearly flat. Pad the range and round outward
+  // to the nearest 5 so differences stay visible even with 1-2 wines.
+  const scores = scored.map(e=>Number(e.score));
+  const rawMin = Math.min(...scores), rawMax = Math.max(...scores);
+  const pad = Math.max(2, Math.round((rawMax-rawMin)*0.2));
+  const yMin = Math.max(0, Math.floor((rawMin-pad)/5)*5);
+  const yMax = Math.min(100, Math.ceil((rawMax+pad)/5)*5);
+  const range = Math.max(1, yMax-yMin);
+
+  const W=640, H=220, PAD_L=34, PAD_R=16, PAD_T=16, PAD_B=28;
+  const plotW = W-PAD_L-PAD_R, plotH = H-PAD_T-PAD_B;
+  const xStep = scored.length>1 ? plotW/(scored.length-1) : 0;
+  const yFor = s => PAD_T + plotH - ((s-yMin)/range)*plotH;
+
+  const pts = scored.map((e,i)=>`${PAD_L+i*xStep},${yFor(e.score)}`).join(" ");
+  const dots = scored.map((e,i)=>`<circle cx="${PAD_L+i*xStep}" cy="${yFor(e.score)}" r="3.5" fill="var(--oxblood)"><title>${esc(e.name)} — ${esc(String(e.score))}</title></circle>`).join("");
   return `<svg viewBox="0 0 ${W} ${H}" class="chart-svg">
-    <line x1="${PAD}" y1="${H-PAD}" x2="${W-PAD}" y2="${H-PAD}" stroke="var(--line)" />
+    <text x="0" y="${PAD_T+4}" font-size="11" fill="var(--ink-soft)">${yMax}</text>
+    <text x="0" y="${H-PAD_B+4}" font-size="11" fill="var(--ink-soft)">${yMin}</text>
+    <line x1="${PAD_L}" y1="${H-PAD_B}" x2="${W-PAD_R}" y2="${H-PAD_B}" stroke="var(--line)" />
     <polyline points="${pts}" fill="none" stroke="var(--oxblood)" stroke-width="2" />
     ${dots}
   </svg>`;
@@ -1466,16 +1528,22 @@ function sharedCellarCardHTML(item){
   const thumbHTML = item._imgUrl
     ? `<a href="${esc(item._imgUrl)}" target="_blank" rel="noopener"><img class="card-thumb" src="${esc(item._imgUrl)}" alt="Label for ${esc(item.name)}" /></a>`
     : "";
+  const expanded = expandedCards.has(item.id);
   return `<article class="card">
     <div class="body">
+      ${thumbHTML}
       <div class="vintage-name">${item.vintage?`<span class="vintage">${esc(item.vintage)}</span>`:""}<h3 class="wine-name">${esc(item.name)}</h3></div>
       ${item.producer?`<p class="producer">${esc(item.producer)}</p>`:""}
       <div class="tags">${tags}</div>
-      ${detailsBlock}
-      ${similarBlock}
+      <div class="card-actions">
+        <button class="icon-btn" data-toggle-card="${item.id}">${expanded?"Hide details":"Show details"}</button>
+      </div>
+      <div class="card-details ${expanded?"":"hidden"}">
+        ${detailsBlock}
+        ${similarBlock}
+      </div>
     </div>
     <div class="aside">
-      ${thumbHTML}
       <div class="score">${esc(String(item.quantity))}<small>in cellar</small></div>
     </div>
   </article>`;
@@ -1634,6 +1702,9 @@ document.getElementById("cancel-btn").onclick = closeForm;
 document.getElementById("export-btn").onclick = exportCSV;
 document.getElementById("search").oninput     = render;
 document.getElementById("sort").onchange      = render;
+document.getElementById("filter-grape").onchange  = render;
+document.getElementById("filter-region").onchange = render;
+document.getElementById("filter-vintage").onchange = render;
 document.getElementById("f-photo").onchange = ev=>{
   const file = ev.target.files[0];
   if(!file) return;
