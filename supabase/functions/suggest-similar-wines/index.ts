@@ -126,17 +126,23 @@ Deno.serve(async (req) => {
     }
 
     const toolUse = (result.content || []).find((b: any) => b.type === "tool_use");
-    const suggestions = toolUse?.input?.suggestions;
+
+    // Claude sometimes double-encodes a nested array as a JSON string
+    // instead of emitting it natively — unwrap up to two levels of that
+    // before giving up, rather than trusting the shape blindly.
+    let suggestions: any = toolUse?.input?.suggestions;
+    for (let i = 0; i < 2 && typeof suggestions === "string"; i++) {
+      try {
+        const parsed = JSON.parse(suggestions);
+        suggestions = Array.isArray(parsed) ? parsed : parsed?.suggestions;
+      } catch {
+        break;
+      }
+    }
+
     if (!Array.isArray(suggestions) || suggestions.length === 0) {
       console.error("Unexpected suggestions shape", JSON.stringify(result));
-      // TEMPORARY debug detail in the error itself (not just server logs, which
-      // aren't easily reachable from this CLI version) so we can see exactly
-      // what came back without dashboard access. Remove once diagnosed.
-      const blockTypes = (result.content || []).map((b: any) => b.type).join(",") || "none";
-      const toolInputPreview = toolUse ? JSON.stringify(toolUse.input).slice(0, 200) : "no tool_use block";
-      return json({
-        error: `Couldn't come up with suggestions for this wine — try again. [debug: stop_reason=${result.stop_reason}, blocks=${blockTypes}, input=${toolInputPreview}]`,
-      }, 502);
+      return json({ error: "Couldn't come up with suggestions for this wine — try again." }, 502);
     }
 
     return json({ suggestions }, 200);
