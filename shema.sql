@@ -649,3 +649,45 @@ alter table public.cellar add column if not exists similar_wines jsonb;
 --      Filled in by scan-label like drink_window/decant_time.
 -- ============================================================
 alter table public.cellar add column if not exists color text;
+
+-- ============================================================
+--  17. CRITIC RATINGS — persisted on the bottle once you've looked
+--      them up, same pattern as similar_wines. Array of
+--      {critic, score, source_note} — score/source_note null where
+--      no citable rating was found for that critic.
+-- ============================================================
+alter table public.cellar add column if not exists critic_ratings jsonb;
+
+-- ============================================================
+--  18. VINTAGE CHART — a shared cache of general vintage-quality
+--      ratings by region/year, NOT scoped to a user like every other
+--      table here: this is public reference knowledge (how good a
+--      given region's 2015 was), not personal data, so once anyone
+--      generates a region it's cached forever for everyone. Written
+--      by the vintage-chart Edge Function using the caller's own
+--      session (no service-role key anywhere in this app), so insert/
+--      update are open to any authenticated user — the Edge Function's
+--      own cost-abuse guardrail is what actually limits who can
+--      trigger a paid generation in the first place.
+-- ============================================================
+create table if not exists public.vintage_ratings (
+  region       text not null,
+  year         int not null,
+  rating       smallint not null check (rating between 1 and 5),
+  note         text,
+  generated_at timestamptz not null default now(),
+  primary key (region, year)
+);
+alter table public.vintage_ratings enable row level security;
+
+drop policy if exists "select any authenticated" on public.vintage_ratings;
+create policy "select any authenticated" on public.vintage_ratings
+  for select using ( auth.uid() is not null );
+
+drop policy if exists "insert any authenticated" on public.vintage_ratings;
+create policy "insert any authenticated" on public.vintage_ratings
+  for insert with check ( auth.uid() is not null );
+
+drop policy if exists "update any authenticated" on public.vintage_ratings;
+create policy "update any authenticated" on public.vintage_ratings
+  for update using ( auth.uid() is not null );

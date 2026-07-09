@@ -99,6 +99,24 @@
   .similar-wine .sw-name{ font-family:"Fraunces",serif; font-weight:600; font-size:15px; }
   .similar-wine .sw-meta{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
   .similar-wine .sw-reason{ font-size:13px; margin-top:6px; }
+  .critic-ratings{ margin-top:14px; }
+  .critic-ratings-list{ display:flex; flex-direction:column; gap:0; }
+  .critic-rating-row{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:8px 0; border-top:1px solid var(--line); font-size:13px; }
+  .critic-rating-row:first-child{ border-top:none; }
+  .critic-rating-row .cr-critic{ font-weight:600; }
+  .critic-rating-row .cr-score{ font-family:"Space Mono",monospace; color:var(--oxblood); font-weight:700; }
+  .critic-rating-row .cr-source{ font-size:11px; color:var(--ink-soft); }
+  .critic-ratings-caveat{ font-size:11px; color:var(--ink-soft); font-style:italic; margin-top:8px; }
+
+  /* ---------- Vintage chart ---------- */
+  .vintage-table{ border-collapse:collapse; }
+  .vintage-table th, .vintage-table td{ padding:0; }
+  .vintage-region-cell{ text-align:left; padding:6px 12px 6px 0 !important; font-size:13px; font-weight:600; white-space:nowrap; position:sticky; left:0; background:var(--paper-2); }
+  .vintage-remove-btn{ font-size:14px; padding:0 0 0 6px; line-height:1; }
+  .vintage-year-head{ font-size:9px; color:var(--ink-soft); font-weight:600; text-align:center; padding-bottom:4px !important; }
+  .vintage-cell{ width:22px; height:22px; border:1px solid var(--paper-2); }
+  .vintage-legend{ display:flex; gap:14px; flex-wrap:wrap; margin-top:14px; font-size:12px; color:var(--ink-soft); }
+  .vintage-swatch{ display:inline-block; width:12px; height:12px; border-radius:2px; margin-right:5px; vertical-align:middle; }
 
   /* ---------- Lookup ---------- */
   .lookup-description{ font-size:14px; margin-top:12px; line-height:1.55; }
@@ -240,6 +258,7 @@
     <button class="view-tab" data-view="shared">Shared</button>
     <button class="view-tab" data-view="stats">Stats</button>
     <button class="view-tab" data-view="lookup">Recent Searches</button>
+    <button class="view-tab" data-view="vintage">Vintage Chart</button>
   </nav>
 
   <section id="view-log">
@@ -409,6 +428,10 @@
             <button type="button" class="btn ghost" id="similar-wines-btn" disabled>Suggest similar wines</button>
             <div class="similar-wines" id="similar-wines-results"></div>
           </div>
+          <div class="col-12">
+            <button type="button" class="btn ghost" id="critic-ratings-btn" disabled>Look up critic ratings</button>
+            <div class="critic-ratings" id="critic-ratings-results"></div>
+          </div>
         </div>
         <div class="form-actions">
           <button type="submit" class="btn primary" id="cellar-save-btn">Save bottle</button>
@@ -491,7 +514,9 @@
       <div class="form-actions">
         <button type="button" class="btn ghost" id="lookup-add-cellar-btn">Add to cellar</button>
         <button type="button" class="btn ghost" id="lookup-log-tasting-btn">Log a tasting</button>
+        <button type="button" class="btn ghost" id="lookup-critic-ratings-btn">Look up critic ratings</button>
       </div>
+      <div class="critic-ratings" id="lookup-critic-ratings-results"></div>
     </section>
 
     <section class="panel">
@@ -501,6 +526,21 @@
       </div>
       <div id="lookup-history"></div>
       <p class="producer hidden" id="lookup-history-empty">Nothing scanned yet — labels you look up will show up here.</p>
+    </section>
+  </section>
+
+  <section id="view-vintage" class="hidden">
+    <section class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:10px;">
+        <h2>Vintage guide</h2>
+        <form id="vintage-add-form" style="display:flex; gap:8px;">
+          <input type="text" id="vintage-add-region" placeholder="Add a region…" style="width:auto;" />
+          <button type="submit" class="btn ghost">Add</button>
+        </form>
+      </div>
+      <p style="font-size:13px; color:var(--ink-soft); margin:8px 0 0;">A general guide to how good each vintage was for a region — starts with regions from your own tastings and cellar. Add any other region you're curious about.</p>
+      <div id="vintage-chart-wrap" style="margin-top:16px; overflow-x:auto;"></div>
+      <p class="producer hidden" id="vintage-empty">No regions yet — log a few wines with a region, or add one above.</p>
     </section>
   </section>
 
@@ -550,6 +590,7 @@ let cellarPhotoFile = null;
 let cellarPhotoRemoved = false;
 let cellarExistingImagePath = null;
 let pendingSimilarWines = null; // suggestions for the currently-open cellar form, saved with the bottle
+let pendingCriticRatings = null; // critic ratings for the currently-open cellar form, saved with the bottle
 let commentsByTasting = {};   // { tasting_id: [comment, ...] }
 let openThreads = new Set();  // tasting ids whose comment thread is expanded
 let expandedCards = new Set(); // tasting/cellar ids showing full details instead of the condensed view
@@ -562,6 +603,9 @@ let outgoingHouseholdRequests = []; // household_requests where you're the reque
 const LOOKUP_HISTORY_KEY = "cellarbook.recentLookups";
 let recentLookups = [];       // device-local scan history, not synced — see loadLookupHistory()
 let currentLookup = null;     // the lookup result currently shown, for the promote buttons
+const VINTAGE_CHART_REGIONS_KEY = "vines.vintageChartRegions";
+let vintageRatings = {};              // { [region]: [{year,rating,note}, ...] } — in-memory cache for this session
+let vintageChartExtraRegions = [];    // device-local list of manually-added regions — see loadVintageChartRegions()
 
 /* ---- 1. AUTH --------------------------------------------------- */
 const gate   = document.getElementById("auth-gate");
@@ -1051,7 +1095,7 @@ function toCellarRow(item){
     region:n(item.region), grape:n(item.grape), price:n(item.price),
     quantity:item.quantity, purchased_date:n(item.purchased_date), notes:n(item.notes),
     image_path:n(item.image_path), drink_window:n(item.drink_window), decant_time:n(item.decant_time),
-    similar_wines:n(item.similar_wines), color:n(item.color)
+    similar_wines:n(item.similar_wines), color:n(item.color), critic_ratings:n(item.critic_ratings)
   };
 }
 
@@ -1067,6 +1111,9 @@ function cellarCardHTML(item){
   const detailsBlock = (drinkDD||decantDD||notesDD) ? `<dl class="notes-block">${drinkDD}${decantDD}${notesDD}</dl>` : "";
   const similarBlock = (Array.isArray(item.similar_wines) && item.similar_wines.length)
     ? `<p class="conn-heading" style="margin-top:14px;">You might also like</p><div class="similar-wines">${similarWinesHTML(item.similar_wines)}</div>`
+    : "";
+  const criticBlock = (Array.isArray(item.critic_ratings) && item.critic_ratings.some(r=>r.score))
+    ? `<p class="conn-heading" style="margin-top:14px;">Critic ratings</p><div class="critic-ratings">${criticRatingsHTML(item.critic_ratings)}</div>`
     : "";
   const thumbHTML = item._imgUrl
     ? `<a href="${esc(item._imgUrl)}" target="_blank" rel="noopener"><img class="card-thumb" src="${esc(item._imgUrl)}" alt="Label for ${esc(item.name)}" /></a>`
@@ -1088,6 +1135,7 @@ function cellarCardHTML(item){
       <div class="card-details ${expanded?"":"hidden"}">
         ${detailsBlock}
         ${similarBlock}
+        ${criticBlock}
       </div>
     </div>
   </article>`;
@@ -1203,6 +1251,9 @@ function openCellarForm(id, prefill){
   pendingSimilarWines = Array.isArray(item.similar_wines) ? item.similar_wines : null;
   document.getElementById("similar-wines-results").innerHTML = pendingSimilarWines ? similarWinesHTML(pendingSimilarWines) : "";
   updateSimilarWinesButton();
+  pendingCriticRatings = Array.isArray(item.critic_ratings) ? item.critic_ratings : null;
+  document.getElementById("critic-ratings-results").innerHTML = pendingCriticRatings ? criticRatingsHTML(pendingCriticRatings) : "";
+  updateCriticRatingsButton();
 
   cellarPhotoFile = null; cellarPhotoRemoved = false; cellarExistingImagePath = item.image_path || null;
   document.getElementById("c-photo").value = "";
@@ -1229,6 +1280,9 @@ function closeCellarForm(){
   pendingSimilarWines = null;
   document.getElementById("similar-wines-results").innerHTML = "";
   updateSimilarWinesButton();
+  pendingCriticRatings = null;
+  document.getElementById("critic-ratings-results").innerHTML = "";
+  updateCriticRatingsButton();
 }
 
 cellarForm.addEventListener("submit", async ev=>{
@@ -1272,6 +1326,7 @@ cellarForm.addEventListener("submit", async ev=>{
     decant_time:document.getElementById("c-decant").value.trim(),
     image_path:imagePath,
     similar_wines:pendingSimilarWines,
+    critic_ratings:pendingCriticRatings,
   };
   const ok = await upsertCellarItem(rec);
   saveBtn.disabled = false;
@@ -1584,6 +1639,9 @@ function sharedCellarCardHTML(item){
   const similarBlock = (Array.isArray(item.similar_wines) && item.similar_wines.length)
     ? `<p class="conn-heading" style="margin-top:14px;">You might also like</p><div class="similar-wines">${similarWinesHTML(item.similar_wines)}</div>`
     : "";
+  const criticBlock = (Array.isArray(item.critic_ratings) && item.critic_ratings.some(r=>r.score))
+    ? `<p class="conn-heading" style="margin-top:14px;">Critic ratings</p><div class="critic-ratings">${criticRatingsHTML(item.critic_ratings)}</div>`
+    : "";
   const thumbHTML = item._imgUrl
     ? `<a href="${esc(item._imgUrl)}" target="_blank" rel="noopener"><img class="card-thumb" src="${esc(item._imgUrl)}" alt="Label for ${esc(item.name)}" /></a>`
     : "";
@@ -1601,6 +1659,7 @@ function sharedCellarCardHTML(item){
       <div class="card-details ${expanded?"":"hidden"}">
         ${detailsBlock}
         ${similarBlock}
+        ${criticBlock}
       </div>
     </div>
   </article>`;
@@ -1711,6 +1770,23 @@ function similarWinesHTML(list){
     </div>`).join("");
 }
 
+// Only renders critics that actually came back with a score — nulls are
+// silently dropped rather than shown as "not found" clutter. Shared by
+// the cellar form results panel and the persisted card display.
+function criticRatingsHTML(ratings){
+  const found = (ratings || []).filter(r => r.score);
+  if(!found.length){
+    return `<p class="producer">No citable ratings found — try again later or check manually.</p>`;
+  }
+  const rows = found.map(r => `
+    <div class="critic-rating-row">
+      <span class="cr-critic">${esc(r.critic)}</span>
+      <span class="cr-score">${esc(r.score)}</span>
+      ${r.source_note ? `<span class="cr-source">${esc(r.source_note)}</span>` : ""}
+    </div>`).join("");
+  return `<div class="critic-ratings-list">${rows}</div><p class="critic-ratings-caveat">Best-effort search results — verify before a big purchase.</p>`;
+}
+
 async function suggestSimilarWines(){
   const btn = document.getElementById("similar-wines-btn");
   const resultsEl = document.getElementById("similar-wines-results");
@@ -1750,6 +1826,41 @@ async function suggestSimilarWines(){
 
 function updateSimilarWinesButton(){
   document.getElementById("similar-wines-btn").disabled = !document.getElementById("c-name").value.trim();
+}
+
+async function lookupCriticRatings(){
+  const btn = document.getElementById("critic-ratings-btn");
+  const resultsEl = document.getElementById("critic-ratings-results");
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = "Searching…";
+  try{
+    const body = {
+      name: document.getElementById("c-name").value.trim(),
+      producer: document.getElementById("c-producer").value.trim(),
+      region: document.getElementById("c-region").value.trim(),
+      vintage: document.getElementById("c-vintage").value.trim(),
+    };
+    const { data, error } = await supabase.functions.invoke("lookup-critic-ratings", { body });
+    if(error){
+      let msg = error.message;
+      try{ const errBody = await error.context.json(); if(errBody?.error) msg = errBody.error; }catch(_){}
+      toast("Couldn't look up ratings — "+msg);
+      return;
+    }
+    const list = Array.isArray(data?.ratings) ? data.ratings : [];
+    pendingCriticRatings = list.length ? list : null;
+    resultsEl.innerHTML = criticRatingsHTML(list);
+  }catch(err){
+    toast("Couldn't look up ratings — "+err.message);
+    console.error(err);
+  }finally{
+    btn.disabled = false; btn.textContent = originalText;
+    updateCriticRatingsButton();
+  }
+}
+
+function updateCriticRatingsButton(){
+  document.getElementById("critic-ratings-btn").disabled = !document.getElementById("c-name").value.trim();
 }
 
 // Defaults a price field to a leading "$" once you've typed something
@@ -1831,6 +1942,7 @@ function renderLookupResult(data){
   currentLookup = data;
   document.getElementById("lookup-result").innerHTML = lookupResultHTML(data);
   document.getElementById("lookup-result-panel").classList.remove("hidden");
+  document.getElementById("lookup-critic-ratings-results").innerHTML = "";
   document.getElementById("lookup-result-panel").scrollIntoView({behavior:"smooth", block:"start"});
 }
 
@@ -1883,6 +1995,130 @@ async function scanForLookup(file){
 function lookupPrefill(){
   const d = currentLookup || {};
   return { vintage:d.vintage, name:d.name, producer:d.producer, region:d.region, grape:d.grape, color:d.color, drink_window:d.drink_window, decant_time:d.decant_time };
+}
+
+// Critic ratings for the currently-displayed lookup result — deliberately
+// session-only, not written back into recentLookups/localStorage, since
+// this is an opt-in enrichment on top of a scan, not part of it.
+async function lookupCriticRatingsForCurrent(){
+  const btn = document.getElementById("lookup-critic-ratings-btn");
+  const resultsEl = document.getElementById("lookup-critic-ratings-results");
+  const d = currentLookup || {};
+  if(!d.name && !d.producer) return;
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = "Searching…";
+  try{
+    const body = { name: d.name, producer: d.producer, region: d.region, vintage: d.vintage };
+    const { data, error } = await supabase.functions.invoke("lookup-critic-ratings", { body });
+    if(error){
+      let msg = error.message;
+      try{ const errBody = await error.context.json(); if(errBody?.error) msg = errBody.error; }catch(_){}
+      toast("Couldn't look up ratings — "+msg);
+      return;
+    }
+    const list = Array.isArray(data?.ratings) ? data.ratings : [];
+    resultsEl.innerHTML = criticRatingsHTML(list);
+  }catch(err){
+    toast("Couldn't look up ratings — "+err.message);
+    console.error(err);
+  }finally{
+    btn.disabled = false; btn.textContent = originalText;
+  }
+}
+
+/* ---- 10c. VINTAGE CHART -------------------------------------------
+   Regions x years, shaded by how good each vintage generally was —
+   backed by the shared vintage_ratings cache table (see vintage-chart
+   Edge Function), so any given region is only ever generated once,
+   for everyone. Starts with regions pulled from your own tastings/
+   cellar; you can add any other region via the text input, tracked
+   locally so it doesn't need its own per-user table. */
+const VINTAGE_LABELS = ["Fair", "Good", "Very Good", "Excellent", "Outstanding"]; // index = rating-1
+const VINTAGE_COLORS = ["#8A2130", "#B5652A", "#9C7A2E", "#6B7B3E", "#3F6B4A"];   // index = rating-1
+
+function vintageYearRange(){
+  const y = new Date().getFullYear();
+  const years = [];
+  for(let i = y-24; i <= y; i++) years.push(i);
+  return years;
+}
+
+function myRegions(){
+  const regions = new Set();
+  entries.filter(e=>e.user_id===currentUserId).forEach(e=>{ if(e.region) regions.add(e.region.trim()); });
+  cellarItems.filter(isMyCellar).forEach(i=>{ if(i.region) regions.add(i.region.trim()); });
+  return [...regions].filter(Boolean);
+}
+
+function loadVintageChartRegions(){
+  try{
+    const raw = localStorage.getItem(VINTAGE_CHART_REGIONS_KEY);
+    vintageChartExtraRegions = raw ? JSON.parse(raw) : [];
+  }catch(err){
+    console.error(err);
+    vintageChartExtraRegions = [];
+  }
+}
+function saveVintageChartRegions(){
+  localStorage.setItem(VINTAGE_CHART_REGIONS_KEY, JSON.stringify(vintageChartExtraRegions));
+}
+
+async function fetchVintageRegion(region){
+  const { data, error } = await supabase.functions.invoke("vintage-chart", { body: { region } });
+  if(error){
+    let msg = error.message;
+    try{ const errBody = await error.context.json(); if(errBody?.error) msg = errBody.error; }catch(_){}
+    console.error("vintage-chart error", msg);
+    return null;
+  }
+  return Array.isArray(data?.years) ? data.years : null;
+}
+
+async function renderVintageChart(){
+  const wrap = document.getElementById("vintage-chart-wrap");
+  const regions = [...new Set([...myRegions(), ...vintageChartExtraRegions])];
+  document.getElementById("vintage-empty").classList.toggle("hidden", regions.length>0);
+  if(!regions.length){ wrap.innerHTML = ""; return; }
+
+  wrap.innerHTML = `<p class="producer">Loading…</p>`;
+  const missing = regions.filter(r=>!vintageRatings[r]);
+  if(missing.length){
+    const results = await Promise.all(missing.map(fetchVintageRegion));
+    missing.forEach((r,i)=>{ if(results[i]) vintageRatings[r] = results[i]; });
+  }
+
+  const years = vintageYearRange();
+  const rows = regions.filter(r=>vintageRatings[r]).map(region=>{
+    const byYear = {};
+    vintageRatings[region].forEach(y=>{ byYear[y.year] = y; });
+    const cells = years.map(y=>{
+      const info = byYear[y];
+      if(!info || !info.rating) return `<td class="vintage-cell" style="background:var(--line);"></td>`;
+      const color = VINTAGE_COLORS[info.rating-1] || "var(--line)";
+      const label = `${y} — ${VINTAGE_LABELS[info.rating-1] || ""}${info.note ? ": "+info.note : ""}`;
+      return `<td class="vintage-cell" style="background:${color};" title="${esc(label)}"></td>`;
+    }).join("");
+    const removeBtn = vintageChartExtraRegions.includes(region)
+      ? `<button type="button" class="icon-btn vintage-remove-btn" data-vintage-remove="${esc(region)}" title="Remove from chart">×</button>`
+      : "";
+    return `<tr><th class="vintage-region-cell">${esc(region)}${removeBtn}</th>${cells}</tr>`;
+  }).join("");
+
+  const head = `<th class="vintage-region-cell"></th>` + years.map(y=>`<th class="vintage-year-head">${String(y).slice(2)}</th>`).join("");
+  const legend = VINTAGE_LABELS.map((l,i)=>`<span><span class="vintage-swatch" style="background:${VINTAGE_COLORS[i]};"></span>${esc(l)}</span>`).join("");
+
+  wrap.innerHTML = rows
+    ? `<table class="vintage-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table><div class="vintage-legend">${legend}</div>`
+    : `<p class="producer">Couldn't load any regions — try again.</p>`;
+
+  wrap.querySelectorAll("[data-vintage-remove]").forEach(btn=>{
+    btn.onclick = ()=>{
+      const region = btn.dataset.vintageRemove;
+      vintageChartExtraRegions = vintageChartExtraRegions.filter(r=>r!==region);
+      saveVintageChartRegions();
+      renderVintageChart();
+    };
+  });
 }
 
 /* ---- 11. WIRE UP & START ---------------------------------------- */
@@ -1952,8 +2188,9 @@ document.getElementById("c-photo-remove").onclick = ()=>{
 document.getElementById("c-scan-btn").onclick = ()=>{
   if(cellarPhotoFile) scanLabel(cellarPhotoFile, "c", "c-scan-btn");
 };
-document.getElementById("c-name").oninput = updateSimilarWinesButton;
+document.getElementById("c-name").oninput = ()=>{ updateSimilarWinesButton(); updateCriticRatingsButton(); };
 document.getElementById("similar-wines-btn").onclick = suggestSimilarWines;
+document.getElementById("critic-ratings-btn").onclick = lookupCriticRatings;
 document.getElementById("connect-form").addEventListener("submit", async ev=>{
   ev.preventDefault();
   const emailField = document.getElementById("connect-email");
@@ -1988,12 +2225,24 @@ document.getElementById("lookup-log-tasting-btn").onclick = ()=>{
   switchView("log");
   openForm(null, prefill);
 };
+document.getElementById("lookup-critic-ratings-btn").onclick = lookupCriticRatingsForCurrent;
 document.getElementById("lookup-clear-history-btn").onclick = ()=>{
   recentLookups = [];
   saveLookupHistory();
   renderLookupHistory();
 };
 loadLookupHistory();
+loadVintageChartRegions();
+document.getElementById("vintage-add-form").addEventListener("submit", ev=>{
+  ev.preventDefault();
+  const input = document.getElementById("vintage-add-region");
+  const region = input.value.trim();
+  if(!region) return;
+  if(!vintageChartExtraRegions.includes(region)) vintageChartExtraRegions.push(region);
+  saveVintageChartRegions();
+  input.value = "";
+  renderVintageChart();
+});
 function switchView(view){
   document.querySelectorAll(".view-tab").forEach(b=>b.classList.toggle("active", b.dataset.view===view));
   document.getElementById("view-log").classList.toggle("hidden", view!=="log");
@@ -2001,9 +2250,11 @@ function switchView(view){
   document.getElementById("view-shared").classList.toggle("hidden", view!=="shared");
   document.getElementById("view-stats").classList.toggle("hidden", view!=="stats");
   document.getElementById("view-lookup").classList.toggle("hidden", view!=="lookup");
+  document.getElementById("view-vintage").classList.toggle("hidden", view!=="vintage");
   if(view==="stats") renderStats();
   if(view==="shared"){ renderConnections(); renderSharedGroups(); }
   if(view==="lookup") renderLookupHistory();
+  if(view==="vintage") renderVintageChart();
 }
 document.querySelectorAll(".view-tab").forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 
