@@ -641,3 +641,11 @@ alter table public.cellar add column if not exists decant_time text;
 --      in the form. Array of {name, producer, region, vintage, reason}.
 -- ============================================================
 alter table public.cellar add column if not exists similar_wines jsonb;
+
+-- ============================================================
+--  16. COLOR — free text (not an enum) so a stray value never blocks
+--      a save, but the form UI offers a fixed dropdown (Red/White/
+--      Rosé/Sparkling/Dessert/Fortified/Other) for consistent entry.
+--      Filled in by scan-label like drink_window/decant_time.
+-- ============================================================
+alter table public.cellar add column if not exists color text;

@@ -2,10 +2,10 @@
 //   - vintage/name/producer/region/grape: STRICTLY what's printed and
 //     legible on the label — never guessed. Never price, tasting notes,
 //     or anything requiring personal judgment — those stay manual.
-//   - drink_window/decant_time: the model's own wine-expertise ESTIMATE
-//     for the identified bottle (cellar form only) — still null if the
-//     wine can't be confidently identified, but not limited to text on
-//     the label the way the other five fields are.
+//   - drink_window/decant_time/color: the model's own wine-expertise
+//     ESTIMATE for the identified bottle (cellar form only) — still
+//     null if the wine can't be confidently identified, but not
+//     limited to text on the label the way the other five fields are.
 //
 // Setup: see README.md in this directory.
 
@@ -76,8 +76,9 @@ Deno.serve(async (req) => {
           grape: { type: ["string", "null"], description: "The grape variety or blend printed on the label, or null." },
           drink_window: { type: ["string", "null"], description: "Estimated optimal drinking window for this specific wine, e.g. '2028-2035', based on your general knowledge of the producer/region/grape/vintage. Null if you can't identify the wine confidently enough to estimate." },
           decant_time: { type: ["string", "null"], description: "Estimated decanting recommendation, e.g. '60-90 min, longer if young'. Null if you can't identify the wine confidently enough to estimate." },
+          color: { type: ["string", "null"], enum: ["Red", "White", "Rosé", "Sparkling", "Dessert", "Fortified", "Other", null], description: "The wine's color/style category, inferred from the grape/label/style even if not printed literally. Null only if genuinely undeterminable." },
         },
-        required: ["vintage", "name", "producer", "region", "grape", "drink_window", "decant_time"],
+        required: ["vintage", "name", "producer", "region", "grape", "drink_window", "decant_time", "color"],
       },
     };
 
@@ -91,7 +92,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: ANTHROPIC_MODEL,
         max_tokens: 500,
-        system: "You read wine labels. For vintage/name/producer/region/grape: extract ONLY what is actually printed and legible on the label in the photo — never guess or infer, use null if not visible. For drink_window/decant_time: these are estimates, so you MAY use your general wine knowledge about this specific producer/region/grape/vintage to give a realistic recommendation — but still use null if you can't identify the wine confidently enough to venture a reasonable estimate; never a generic guess for a wine you don't recognize. Never include price, tasting notes, or any other commentary. Call the record_wine_label tool exactly once with your findings.",
+        system: "You read wine labels. For vintage/name/producer/region/grape: extract ONLY what is actually printed and legible on the label in the photo — never guess or infer, use null if not visible. For drink_window/decant_time/color: these are estimates, so you MAY use your general wine knowledge about this specific producer/region/grape/vintage to give a realistic answer (color is usually inferable from the grape/style even when not printed) — but still use null if you can't identify the wine confidently enough to venture a reasonable estimate; never a generic guess for a wine you don't recognize. Never include price, tasting notes, or any other commentary. Call the record_wine_label tool exactly once with your findings.",
         tools: [tool],
         tool_choice: { type: "tool", name: "record_wine_label" },
         messages: [{

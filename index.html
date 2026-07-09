@@ -304,7 +304,37 @@
 
   <section id="view-cellar" class="hidden">
     <div class="toolbar">
-      <div style="flex:1 1 auto;"></div>
+      <input type="search" id="cellar-search" placeholder="Search name, producer, region, grape, notes…" aria-label="Search cellar" />
+      <div class="sortgroup">
+        <label for="cellar-sort" style="margin:0;">Sort</label>
+        <select id="cellar-sort" aria-label="Sort bottles">
+          <option value="name-asc">Name, A → Z</option>
+          <option value="vintage-desc">Vintage, new → old</option>
+          <option value="vintage-asc">Vintage, old → new</option>
+          <option value="qty-desc">Quantity, high → low</option>
+        </select>
+      </div>
+      <div class="sortgroup">
+        <label for="cellar-filter-color" style="margin:0;">Color</label>
+        <select id="cellar-filter-color" aria-label="Filter by color"><option value="">All</option></select>
+      </div>
+      <div class="sortgroup">
+        <label for="cellar-filter-region" style="margin:0;">Region</label>
+        <select id="cellar-filter-region" aria-label="Filter by region"><option value="">All</option></select>
+      </div>
+      <div class="sortgroup">
+        <label for="cellar-filter-grape" style="margin:0;">Grape</label>
+        <select id="cellar-filter-grape" aria-label="Filter by grape"><option value="">All</option></select>
+      </div>
+      <div class="sortgroup">
+        <label for="cellar-groupby" style="margin:0;">Group by</label>
+        <select id="cellar-groupby" aria-label="Group bottles">
+          <option value="">None</option>
+          <option value="color">Color</option>
+          <option value="region">Region</option>
+          <option value="grape">Grape</option>
+        </select>
+      </div>
       <button class="btn primary" id="cellar-scan-new-btn">Scan label</button>
       <button class="btn ghost" id="cellar-new-btn">Manual add</button>
     </div>
@@ -321,6 +351,19 @@
           <div class="col-4"><label for="c-grape">Grape / type</label><input id="c-grape" placeholder="Cabernet-dominant blend" /></div>
           <div class="col-2"><label for="c-price">Price</label><input id="c-price" placeholder="$45" /></div>
           <div class="col-2"><label for="c-quantity">Quantity *</label><input id="c-quantity" type="number" min="0" value="1" required /></div>
+          <div class="col-3">
+            <label for="c-color">Color</label>
+            <select id="c-color">
+              <option value="">–</option>
+              <option>Red</option>
+              <option>White</option>
+              <option>Rosé</option>
+              <option>Sparkling</option>
+              <option>Dessert</option>
+              <option>Fortified</option>
+              <option>Other</option>
+            </select>
+          </div>
           <div class="col-3"><label for="c-purchased">Purchased</label><input id="c-purchased" type="date" /></div>
           <div class="col-9"><label for="c-notes">Notes</label><textarea id="c-notes" placeholder="Where you got it, why you bought it, when to drink…"></textarea></div>
           <div class="col-4"><label for="c-drink-window">Drink window <span style="text-transform:none;font-weight:400;">(estimate)</span></label><input id="c-drink-window" placeholder="2028–2035" /></div>
@@ -923,12 +966,12 @@ function toCellarRow(item){
     region:n(item.region), grape:n(item.grape), price:n(item.price),
     quantity:item.quantity, purchased_date:n(item.purchased_date), notes:n(item.notes),
     image_path:n(item.image_path), drink_window:n(item.drink_window), decant_time:n(item.decant_time),
-    similar_wines:n(item.similar_wines)
+    similar_wines:n(item.similar_wines), color:n(item.color)
   };
 }
 
 function cellarCardHTML(item){
-  const tags = [item.region, item.grape, item.price].filter(Boolean).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+  const tags = [item.color, item.region, item.grape, item.price].filter(Boolean).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
   const purchasedTag = item.purchased_date ? `<span class="tag date">${esc(item.purchased_date)}</span>` : "";
   const addedTag = item.added_by === currentUserId
     ? `<span class="tag shared">Added by you</span>`
@@ -963,15 +1006,78 @@ function cellarCardHTML(item){
   </article>`;
 }
 
+// Rebuilds a filter <select>'s options from the values actually present
+// in the cellar, preserving the current selection if it's still valid.
+function populateFilterSelect(id, values){
+  const el = document.getElementById(id);
+  const current = el.value;
+  const unique = [...new Set(values.filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  el.innerHTML = `<option value="">All</option>` + unique.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  el.value = unique.includes(current) ? current : "";
+}
+
+function cellarSortFn(sort){
+  const num = v => (v===null||v===undefined||v==="") ? -1 : Number(v);
+  return {
+    "name-asc":     (a,b)=>(a.name||"").localeCompare(b.name||""),
+    "vintage-desc": (a,b)=>num(b.vintage)-num(a.vintage),
+    "vintage-asc":  (a,b)=>num(a.vintage)-num(b.vintage),
+    "qty-desc":     (a,b)=>(b.quantity||0)-(a.quantity||0),
+  }[sort] || ((a,b)=>(a.name||"").localeCompare(b.name||""));
+}
+
 function renderCellar(){
   // This tab is your household's editable pool only — cellar items
   // visible to you only because a connection shared theirs (read-only)
   // live in the Shared tab instead (see renderSharedGroups()).
+  const mine = cellarItems.filter(isMyCellar);
+
+  populateFilterSelect("cellar-filter-color", mine.map(i=>i.color));
+  populateFilterSelect("cellar-filter-region", mine.map(i=>i.region));
+  populateFilterSelect("cellar-filter-grape", mine.map(i=>i.grape));
+
+  const q = document.getElementById("cellar-search").value.trim().toLowerCase();
+  const colorFilter = document.getElementById("cellar-filter-color").value;
+  const regionFilter = document.getElementById("cellar-filter-region").value;
+  const grapeFilter = document.getElementById("cellar-filter-grape").value;
+  const groupBy = document.getElementById("cellar-groupby").value;
+  const sortFn = cellarSortFn(document.getElementById("cellar-sort").value);
+
+  const filtered = mine.filter(item=>{
+    if(colorFilter && item.color !== colorFilter) return false;
+    if(regionFilter && item.region !== regionFilter) return false;
+    if(grapeFilter && item.grape !== grapeFilter) return false;
+    if(q){
+      const hay = [item.name,item.producer,item.region,item.grape,item.notes].filter(Boolean).join(" ").toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
   const cards = document.getElementById("cellar-cards");
-  const list = cellarItems.filter(isMyCellar).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
-  cards.innerHTML = list.map(cellarCardHTML).join("");
-  document.getElementById("cellar-empty").classList.toggle("hidden", list.length>0);
-  document.getElementById("cellar-count-label").textContent = list.length ? `${list.length} in the rack` : "";
+  if(!filtered.length){
+    cards.innerHTML = mine.length ? `<p class="producer">No bottles match your search/filters.</p>` : "";
+  }else if(!groupBy){
+    cards.innerHTML = filtered.slice().sort(sortFn).map(cellarCardHTML).join("");
+  }else{
+    const groups = {};
+    filtered.forEach(item=>{ (groups[item[groupBy] || "Uncategorized"] ||= []).push(item); });
+    const groupNames = Object.keys(groups).sort((a,b)=>{
+      if(a==="Uncategorized") return 1;
+      if(b==="Uncategorized") return -1;
+      return a.localeCompare(b);
+    });
+    cards.innerHTML = groupNames.map(name=>`
+      <div class="shared-group">
+        <h3 class="shared-group-title">${esc(name)}</h3>
+        <div class="cards">${groups[name].slice().sort(sortFn).map(cellarCardHTML).join("")}</div>
+      </div>`).join("");
+  }
+
+  document.getElementById("cellar-empty").classList.toggle("hidden", mine.length>0);
+  document.getElementById("cellar-count-label").textContent = mine.length
+    ? (filtered.length === mine.length ? `${mine.length} in the rack` : `Showing ${filtered.length} of ${mine.length}`)
+    : "";
   cards.querySelectorAll("[data-cellar-edit]").forEach(b=>b.onclick=()=>openCellarForm(b.dataset.cellarEdit));
   cards.querySelectorAll("[data-cellar-del]").forEach(b=>b.onclick=()=>delCellar(b.dataset.cellarDel));
   cards.querySelectorAll("[data-cellar-log]").forEach(b=>b.onclick=()=>logTasting(b.dataset.cellarLog));
@@ -988,7 +1094,7 @@ function openCellarForm(id){
   set("c-vintage",item.vintage); set("c-name",item.name); set("c-producer",item.producer);
   set("c-region",item.region); set("c-grape",item.grape); set("c-price",item.price);
   set("c-quantity", item.quantity ?? 1); set("c-purchased",item.purchased_date); set("c-notes",item.notes);
-  set("c-drink-window",item.drink_window); set("c-decant",item.decant_time);
+  set("c-color",item.color); set("c-drink-window",item.drink_window); set("c-decant",item.decant_time);
   pendingSimilarWines = Array.isArray(item.similar_wines) ? item.similar_wines : null;
   document.getElementById("similar-wines-results").innerHTML = pendingSimilarWines ? similarWinesHTML(pendingSimilarWines) : "";
   updateSimilarWinesButton();
@@ -1056,6 +1162,7 @@ cellarForm.addEventListener("submit", async ev=>{
     quantity:Number(document.getElementById("c-quantity").value || 1),
     purchased_date:document.getElementById("c-purchased").value,
     notes:document.getElementById("c-notes").value.trim(),
+    color:document.getElementById("c-color").value,
     drink_window:document.getElementById("c-drink-window").value.trim(),
     decant_time:document.getElementById("c-decant").value.trim(),
     image_path:imagePath,
@@ -1348,7 +1455,7 @@ function renderConnections(){
 }
 
 function sharedCellarCardHTML(item){
-  const tags = [item.region, item.grape, item.price].filter(Boolean).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+  const tags = [item.color, item.region, item.grape, item.price].filter(Boolean).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
   const drinkDD = item.drink_window ? `<dt>Drink</dt><dd>${esc(item.drink_window)}</dd>` : "";
   const decantDD = item.decant_time ? `<dt>Decant</dt><dd>${esc(item.decant_time)}</dd>` : "";
   const notesDD = item.notes ? `<dt>Notes</dt><dd>${esc(item.notes)}</dd>` : "";
@@ -1456,6 +1563,7 @@ async function scanLabel(file, prefix, btnId){
     set(`${prefix}-region`, data.region);
     set(`${prefix}-grape`, data.grape);
     if(prefix === "c"){
+      set("c-color", data.color);
       set("c-drink-window", data.drink_window);
       set("c-decant", data.decant_time);
       updateSimilarWinesButton();
@@ -1553,6 +1661,12 @@ document.getElementById("cellar-scan-new-btn").onclick = ()=>{
   document.getElementById("c-photo").click();
 };
 document.getElementById("cellar-cancel-btn").onclick = closeCellarForm;
+document.getElementById("cellar-search").oninput        = renderCellar;
+document.getElementById("cellar-sort").onchange         = renderCellar;
+document.getElementById("cellar-filter-color").onchange  = renderCellar;
+document.getElementById("cellar-filter-region").onchange = renderCellar;
+document.getElementById("cellar-filter-grape").onchange  = renderCellar;
+document.getElementById("cellar-groupby").onchange       = renderCellar;
 document.getElementById("c-photo").onchange = ev=>{
   const file = ev.target.files[0];
   if(!file) return;
