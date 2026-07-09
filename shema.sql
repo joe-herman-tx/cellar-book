@@ -634,3 +634,10 @@ create policy "cellar photos: select own household or shared" on storage.objects
 -- ============================================================
 alter table public.cellar add column if not exists drink_window text;
 alter table public.cellar add column if not exists decant_time text;
+
+-- ============================================================
+--  15. SIMILAR WINE SUGGESTIONS — persisted on the bottle once you've
+--      generated them, so they show up on the card, not just once
+--      in the form. Array of {name, producer, region, vintage, reason}.
+-- ============================================================
+alter table public.cellar add column if not exists similar_wines jsonb;

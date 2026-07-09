@@ -445,6 +445,7 @@ let existingImagePath = null; // image_path already on the entry being edited
 let cellarPhotoFile = null;
 let cellarPhotoRemoved = false;
 let cellarExistingImagePath = null;
+let pendingSimilarWines = null; // suggestions for the currently-open cellar form, saved with the bottle
 let commentsByTasting = {};   // { tasting_id: [comment, ...] }
 let openThreads = new Set();  // tasting ids whose comment thread is expanded
 let connections = [];         // [{id, shareCellar}] — people you're connected with
@@ -921,7 +922,8 @@ function toCellarRow(item){
     id:item.id, vintage:n(item.vintage), name:item.name, producer:n(item.producer),
     region:n(item.region), grape:n(item.grape), price:n(item.price),
     quantity:item.quantity, purchased_date:n(item.purchased_date), notes:n(item.notes),
-    image_path:n(item.image_path), drink_window:n(item.drink_window), decant_time:n(item.decant_time)
+    image_path:n(item.image_path), drink_window:n(item.drink_window), decant_time:n(item.decant_time),
+    similar_wines:n(item.similar_wines)
   };
 }
 
@@ -935,6 +937,9 @@ function cellarCardHTML(item){
   const decantDD = item.decant_time ? `<dt>Decant</dt><dd>${esc(item.decant_time)}</dd>` : "";
   const notesDD = item.notes ? `<dt>Notes</dt><dd>${esc(item.notes)}</dd>` : "";
   const detailsBlock = (drinkDD||decantDD||notesDD) ? `<dl class="notes-block">${drinkDD}${decantDD}${notesDD}</dl>` : "";
+  const similarBlock = (Array.isArray(item.similar_wines) && item.similar_wines.length)
+    ? `<p class="conn-heading" style="margin-top:14px;">You might also like</p><div class="similar-wines">${similarWinesHTML(item.similar_wines)}</div>`
+    : "";
   const thumbHTML = item._imgUrl
     ? `<a href="${esc(item._imgUrl)}" target="_blank" rel="noopener"><img class="card-thumb" src="${esc(item._imgUrl)}" alt="Label for ${esc(item.name)}" /></a>`
     : "";
@@ -944,6 +949,7 @@ function cellarCardHTML(item){
       ${item.producer?`<p class="producer">${esc(item.producer)}</p>`:""}
       <div class="tags">${tags}${purchasedTag}${addedTag}</div>
       ${detailsBlock}
+      ${similarBlock}
       <div class="card-actions">
         <button class="icon-btn" data-cellar-log="${item.id}">Log a tasting</button>
         <button class="icon-btn" data-cellar-edit="${item.id}">Edit</button>
@@ -983,7 +989,8 @@ function openCellarForm(id){
   set("c-region",item.region); set("c-grape",item.grape); set("c-price",item.price);
   set("c-quantity", item.quantity ?? 1); set("c-purchased",item.purchased_date); set("c-notes",item.notes);
   set("c-drink-window",item.drink_window); set("c-decant",item.decant_time);
-  document.getElementById("similar-wines-results").innerHTML = "";
+  pendingSimilarWines = Array.isArray(item.similar_wines) ? item.similar_wines : null;
+  document.getElementById("similar-wines-results").innerHTML = pendingSimilarWines ? similarWinesHTML(pendingSimilarWines) : "";
   updateSimilarWinesButton();
 
   cellarPhotoFile = null; cellarPhotoRemoved = false; cellarExistingImagePath = item.image_path || null;
@@ -1008,6 +1015,7 @@ function closeCellarForm(){
   document.getElementById("c-photo-preview").classList.remove("show");
   document.getElementById("c-photo-remove").classList.add("hidden");
   document.getElementById("c-scan-btn").classList.add("hidden");
+  pendingSimilarWines = null;
   document.getElementById("similar-wines-results").innerHTML = "";
   updateSimilarWinesButton();
 }
@@ -1051,6 +1059,7 @@ cellarForm.addEventListener("submit", async ev=>{
     drink_window:document.getElementById("c-drink-window").value.trim(),
     decant_time:document.getElementById("c-decant").value.trim(),
     image_path:imagePath,
+    similar_wines:pendingSimilarWines,
   };
   const ok = await upsertCellarItem(rec);
   saveBtn.disabled = false;
@@ -1344,6 +1353,9 @@ function sharedCellarCardHTML(item){
   const decantDD = item.decant_time ? `<dt>Decant</dt><dd>${esc(item.decant_time)}</dd>` : "";
   const notesDD = item.notes ? `<dt>Notes</dt><dd>${esc(item.notes)}</dd>` : "";
   const detailsBlock = (drinkDD||decantDD||notesDD) ? `<dl class="notes-block">${drinkDD}${decantDD}${notesDD}</dl>` : "";
+  const similarBlock = (Array.isArray(item.similar_wines) && item.similar_wines.length)
+    ? `<p class="conn-heading" style="margin-top:14px;">You might also like</p><div class="similar-wines">${similarWinesHTML(item.similar_wines)}</div>`
+    : "";
   const thumbHTML = item._imgUrl
     ? `<a href="${esc(item._imgUrl)}" target="_blank" rel="noopener"><img class="card-thumb" src="${esc(item._imgUrl)}" alt="Label for ${esc(item.name)}" /></a>`
     : "";
@@ -1353,6 +1365,7 @@ function sharedCellarCardHTML(item){
       ${item.producer?`<p class="producer">${esc(item.producer)}</p>`:""}
       <div class="tags">${tags}</div>
       ${detailsBlock}
+      ${similarBlock}
     </div>
     <div class="aside">
       ${thumbHTML}
@@ -1456,6 +1469,15 @@ async function scanLabel(file, prefix, btnId){
   }
 }
 
+function similarWinesHTML(list){
+  return list.map(s=>`
+    <div class="similar-wine">
+      <div class="sw-name">${esc(s.name)}${s.vintage?` <span class="vintage">${esc(s.vintage)}</span>`:""}</div>
+      <div class="sw-meta">${esc([s.producer, s.region].filter(Boolean).join(" · "))}</div>
+      <div class="sw-reason">${esc(s.reason)}</div>
+    </div>`).join("");
+}
+
 async function suggestSimilarWines(){
   const btn = document.getElementById("similar-wines-btn");
   const resultsEl = document.getElementById("similar-wines-results");
@@ -1479,14 +1501,11 @@ async function suggestSimilarWines(){
     const list = Array.isArray(data?.suggestions) ? data.suggestions : [];
     if(!list.length){
       resultsEl.innerHTML = `<p class="producer">No suggestions came back — try again.</p>`;
+      pendingSimilarWines = null;
       return;
     }
-    resultsEl.innerHTML = list.map(s=>`
-      <div class="similar-wine">
-        <div class="sw-name">${esc(s.name)}</div>
-        <div class="sw-meta">${esc([s.producer, s.region].filter(Boolean).join(" · "))}</div>
-        <div class="sw-reason">${esc(s.reason)}</div>
-      </div>`).join("");
+    pendingSimilarWines = list;
+    resultsEl.innerHTML = similarWinesHTML(list);
   }catch(err){
     toast("Couldn't get suggestions — "+err.message);
     console.error(err);
