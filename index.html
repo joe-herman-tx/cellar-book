@@ -639,12 +639,14 @@ let recentLookups = [];       // device-local scan history, not synced — see l
 let currentLookup = null;     // the lookup result currently shown, for the promote buttons
 const VINTAGE_CHART_REGIONS_KEY = "vines.vintageChartRegions";
 const VINTAGE_CHART_HIDDEN_KEY = "vines.vintageChartHiddenRegions";
-let vintageRatings = {};              // { [region]: [{year,rating,note}, ...] } — in-memory cache for this session
+const VINTAGE_RATINGS_CACHE_KEY = "vines.vintageRatingsCache";
+let vintageRatings = {};              // { [region]: [{year,rating,note}, ...] } — persisted to localStorage so repeat visits skip the network round-trip; the server (vintage_ratings table) is still the source of truth
 let vintageChartExtraRegions = [];    // device-local list of manually-added regions — see loadVintageChartRegions()
 let vintageChartHiddenRegions = [];   // device-local list of default/extra regions you've removed from view
 const GRAPE_GUIDE_KEY = "vines.grapeGuideExtraGrapes";
 const GRAPE_GUIDE_HIDDEN_KEY = "vines.grapeGuideHiddenGrapes";
-let grapeProfiles = {};        // { [grape]: {description,body,tannin,acidity,finish,nose,palate,best_regions,notable_vintages} }
+const GRAPE_PROFILES_CACHE_KEY = "vines.grapeProfilesCache";
+let grapeProfiles = {};        // { [grape]: {description,body,tannin,acidity,finish,nose,palate,best_regions,notable_vintages} } — persisted to localStorage, same reasoning as vintageRatings
 let grapeGuideExtraGrapes = [];  // device-local list of manually-added grapes
 let grapeGuideHiddenGrapes = []; // device-local list of default/extra grapes you've removed from view
 
@@ -2144,12 +2146,22 @@ function loadVintageChartRegions(){
     console.error(err);
     vintageChartHiddenRegions = [];
   }
+  try{
+    const raw = localStorage.getItem(VINTAGE_RATINGS_CACHE_KEY);
+    vintageRatings = raw ? JSON.parse(raw) : {};
+  }catch(err){
+    console.error(err);
+    vintageRatings = {};
+  }
 }
 function saveVintageChartRegions(){
   localStorage.setItem(VINTAGE_CHART_REGIONS_KEY, JSON.stringify(vintageChartExtraRegions));
 }
 function saveVintageChartHidden(){
   localStorage.setItem(VINTAGE_CHART_HIDDEN_KEY, JSON.stringify(vintageChartHiddenRegions));
+}
+function saveVintageRatingsCache(){
+  localStorage.setItem(VINTAGE_RATINGS_CACHE_KEY, JSON.stringify(vintageRatings));
 }
 
 async function fetchVintageRegion(region){
@@ -2185,7 +2197,9 @@ async function renderVintageChart(){
   const missing = regions.filter(r=>!vintageRatings[r]);
   if(missing.length){
     const results = await Promise.all(missing.map(fetchVintageRegion));
-    missing.forEach((r,i)=>{ if(results[i]) vintageRatings[r] = results[i]; });
+    let gotNew = false;
+    missing.forEach((r,i)=>{ if(results[i]){ vintageRatings[r] = results[i]; gotNew = true; } });
+    if(gotNew) saveVintageRatingsCache();
   }
 
   const years = vintageYearRange();
@@ -2294,12 +2308,22 @@ function loadGrapeGuideList(){
     console.error(err);
     grapeGuideHiddenGrapes = [];
   }
+  try{
+    const raw = localStorage.getItem(GRAPE_PROFILES_CACHE_KEY);
+    grapeProfiles = raw ? JSON.parse(raw) : {};
+  }catch(err){
+    console.error(err);
+    grapeProfiles = {};
+  }
 }
 function saveGrapeGuideExtra(){
   localStorage.setItem(GRAPE_GUIDE_KEY, JSON.stringify(grapeGuideExtraGrapes));
 }
 function saveGrapeGuideHidden(){
   localStorage.setItem(GRAPE_GUIDE_HIDDEN_KEY, JSON.stringify(grapeGuideHiddenGrapes));
+}
+function saveGrapeProfilesCache(){
+  localStorage.setItem(GRAPE_PROFILES_CACHE_KEY, JSON.stringify(grapeProfiles));
 }
 
 async function fetchGrapeProfile(grape){
@@ -2344,7 +2368,9 @@ async function renderGrapeGuide(){
   const missing = grapes.filter(g=>!grapeProfiles[g]);
   if(missing.length){
     const results = await Promise.all(missing.map(fetchGrapeProfile));
-    missing.forEach((g,i)=>{ if(results[i]) grapeProfiles[g] = results[i]; });
+    let gotNew = false;
+    missing.forEach((g,i)=>{ if(results[i]){ grapeProfiles[g] = results[i]; gotNew = true; } });
+    if(gotNew) saveGrapeProfilesCache();
   }
 
   const cards = grapes.filter(g=>grapeProfiles[g]).map(g=>grapeCardHTML(g, grapeProfiles[g])).join("");
